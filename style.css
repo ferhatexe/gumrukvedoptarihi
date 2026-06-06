@@ -186,6 +186,44 @@ body {
     background: var(--bg-surface);
 }
 
+.hero-glow-1 {
+    position: absolute;
+    width: 350px;
+    height: 350px;
+    background: radial-gradient(circle, rgba(229, 62, 62, 0.08) 0%, transparent 70%);
+    top: -80px;
+    left: -80px;
+    z-index: 1;
+    filter: blur(50px);
+    animation: float-slow 16s ease-in-out infinite alternate;
+    pointer-events: none;
+}
+
+.hero-glow-2 {
+    position: absolute;
+    width: 280px;
+    height: 280px;
+    background: radial-gradient(circle, rgba(229, 62, 62, 0.05) 0%, transparent 70%);
+    bottom: -60px;
+    right: 15%;
+    z-index: 1;
+    filter: blur(40px);
+    animation: float-slow-reverse 20s ease-in-out infinite alternate;
+    pointer-events: none;
+}
+
+@keyframes float-slow {
+    0% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(60px, 40px) scale(1.15); }
+    100% { transform: translate(-30px, 70px) scale(0.9); }
+}
+
+@keyframes float-slow-reverse {
+    0% { transform: translate(0, 0) scale(1.1); }
+    50% { transform: translate(-50px, -30px) scale(0.85); }
+    100% { transform: translate(40px, -60px) scale(1.05); }
+}
+
 .hero-grid-bg {
     background-image: 
         linear-gradient(var(--border-light) 1px, transparent 1px),
@@ -195,6 +233,12 @@ body {
     position: absolute;
     inset: 0;
     pointer-events: none;
+    animation: grid-drift 24s linear infinite;
+}
+
+@keyframes grid-drift {
+    0% { background-position: 0 0; }
+    100% { background-position: 48px 48px; }
 }
 
 .hero-content {
