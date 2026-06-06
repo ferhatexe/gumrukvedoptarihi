@@ -514,13 +514,8 @@ class HttpCustomsScraper:
                     continue
 
                 if result['status'] == 'RateLimit':
-                    wait_secs = self._parse_wait_seconds(result.get('message', ''))
-                    wait_min = wait_secs // 60
-                    wait_sec = wait_secs % 60
-                    self.log(f"[{gcb_no}] Deneme {attempt}: Bekleme süresi — {wait_min}dk {wait_sec}sn bekleniyor...")
-                    if self._interruptible_sleep(wait_secs, log_msg_prefix=f"[{gcb_no}] Soğuma süresi bekleniyor"):
-                        return {"success": False, "status": "İptal", "message": "Durduruldu.", "date": None}
-                    continue
+                    # Return immediately without sleeping, let the client handle the cooldown
+                    return result
 
                 # Non-finalized results (Tarih Okunamadı, Sistem Uyarısı, Bilinmeyen etc.)
                 # Log and retry

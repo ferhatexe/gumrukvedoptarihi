@@ -450,8 +450,8 @@ async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
                         ws_send({"type": "row_success", "row": row_idx, "gcb": gcb_no, "date": result["date"]})
                     except Exception as e:
                         ws_send({"type": "row_fail", "row": row_idx, "gcb": gcb_no, "message": f"Excel yazma hatası: {str(e)}"})
-                elif result.get("success") and result.get("status") == "Kapanmamış":
-                    ws_send({"type": "row_not_closed", "row": row_idx, "gcb": gcb_no, "message": "Beyanname kapanmamış."})
+                elif (result.get("success") and result.get("status") == "Kapanmamış") or result.get("status") == "RateLimit":
+                    ws_send({"type": "row_not_closed", "row": row_idx, "gcb": gcb_no, "message": result.get("message", "Beyanname kapanmamış.")})
                 else:
                     ws_send({"type": "row_fail", "row": row_idx, "gcb": gcb_no, "message": result.get("message", "Sorgulama hatası.")})
                 
