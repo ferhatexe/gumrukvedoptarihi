@@ -356,13 +356,12 @@ def generate_custom_excel(parsed_items: List[dict]):
     ws = wb.active
     ws.title = "Sorgu Sonuçları"
     
-    # Write exactly identical headers for fully compatible structure
+    # Write only the 4 parsed headers for custom list queries (prevents empty columns on the right)
     headers = [
-        'E-arşiv fatura no', 'Faturalama tarihi', 'Ad 1', 'Toplam CIF tutarı', 'Toplam FOB', 
-        'Para birimi', 'FOB USD', 'Para birimi', 'GB Numarası', 'GB Tarihi', 'Gümrük', 
-        'Gümrük İntaç Tarihi', 'Incoterms', 'Satış temsilcisi', 'Satış temsilcisi adı', 
-        'Teslimat', 'Ram Fatura No', 'Toplam Palet', 'Toplam Koli', 'Toplam Sandık Paleti', 
-        'Toplam Ağırlık', 'Toplam Net Ağırlık', 'Toplam miktar', 'Poliçe No', 'Evrak Sorumlusu 2'
+        'E-arşiv fatura no', 
+        'Ad 1', 
+        'GB Numarası', 
+        'Gümrük İntaç Tarihi'
     ]
     
     for col_idx, header in enumerate(headers, 1):
@@ -371,10 +370,10 @@ def generate_custom_excel(parsed_items: List[dict]):
     # Write parsed items
     for idx, item in enumerate(parsed_items, 2):
         ws.cell(row=idx, column=1, value=item["fatura"])
-        ws.cell(row=idx, column=3, value=item["firma"])
-        ws.cell(row=idx, column=9, value=item["gcb"])
+        ws.cell(row=idx, column=2, value=item["firma"])
+        ws.cell(row=idx, column=3, value=item["gcb"])
         # Set intac empty
-        ws.cell(row=idx, column=12, value=None)
+        ws.cell(row=idx, column=4, value=None)
         
     # Format as professional table
     apply_table_formatting_to_sheet(ws)
