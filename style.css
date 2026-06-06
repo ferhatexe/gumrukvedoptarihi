@@ -1470,6 +1470,20 @@ body {
         height: 580px;
     }
     
+    .control-panel.panel-section {
+        height: auto;
+    }
+    
+    .control-panel .tab-content-container,
+    .control-panel .tab-content,
+    .control-panel .input-panel-body {
+        height: auto;
+    }
+    
+    #tab-terminal {
+        height: 400px;
+    }
+    
     .tab-btn {
         padding: 0.9rem 0.5rem;
         font-size: 0.72rem;
