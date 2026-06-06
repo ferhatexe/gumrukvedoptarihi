@@ -3,6 +3,7 @@ import re
 import json
 import asyncio
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, date
 from typing import List, Dict, Any
@@ -581,9 +582,8 @@ async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
                     completed += 1
                     ws_send({"type": "progress", "completed": completed, "total": total_rows})
         
-        # ── Step 4: Run with ThreadPoolExecutor ──
-        num_workers = min(5, total_unique)
-        ws_log(f"[SİSTEM] {num_workers} paralel HTTP işçisi başlatılıyor (Bellek dostu limit: 5)...")
+        # ── Step 4: Run Sequentially (Single Worker) ──
+        ws_log(f"[SİSTEM] Sıralı sorgulama başlatılıyor (Sunucu race-condition hatasını önlemek için tekil işçi)...")
         
         # Mark all rows as started
         for gcb_no, rows in gcb_groups.items():
@@ -591,26 +591,21 @@ async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
                 ws_send({"type": "row_start", "row": item["row"], "gcb": gcb_no})
         
         try:
-            with ThreadPoolExecutor(max_workers=num_workers) as executor:
-                future_to_gcb = {
-                    executor.submit(query_single_gcb, gcb): gcb
-                    for gcb in unique_gcbs
-                }
+            for idx, gcb in enumerate(unique_gcbs):
+                if state.cancel_event.is_set():
+                    ws_log("[SİSTEM] Sorgulama durduruldu.")
+                    break
                 
-                for future in as_completed(future_to_gcb):
-                    if state.cancel_event.is_set():
-                        for f in future_to_gcb:
-                            f.cancel()
-                        ws_log("[SİSTEM] Sorgulama durduruldu.")
-                        break
-                    
-                    try:
-                        data = future.result()
-                        process_result(data["gcb"], data["result"])
-                    except Exception as e:
-                        gcb = future_to_gcb[future]
-                        ws_log(f"[HATA] {gcb}: {str(e)}")
-                        process_result(gcb, {"success": False, "status": "Hata", "message": str(e), "date": None})
+                try:
+                    data = query_single_gcb(gcb)
+                    process_result(data["gcb"], data["result"])
+                except Exception as e:
+                    ws_log(f"[HATA] {gcb}: {str(e)}")
+                    process_result(gcb, {"success": False, "status": "Hata", "message": str(e), "date": None})
+                
+                # Add a small delay between queries to prevent portal rate limits
+                if idx < len(unique_gcbs) - 1 and not state.cancel_event.is_set():
+                    time.sleep(1.0)
         finally:
             try:
                 with excel_lock:
