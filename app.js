@@ -8,6 +8,23 @@ let activeDateColIdx = 12; // Index of Date column (1-based)
 let activeFaturaColIdx = 1; // Index of Fatura column (1-based)
 let activeFirmaColIdx = 3; // Index of Firma column (1-based)
 
+// Session Management: Generate or retrieve session ID
+function getOrCreateSessionId() {
+    let sessionId = localStorage.getItem("gumruk_session_id");
+    if (!sessionId) {
+        try {
+            const arr = new Uint8Array(16);
+            window.crypto.getRandomValues(arr);
+            sessionId = Array.from(arr, dec => dec.toString(16).padStart(2, '0')).join('');
+        } catch (e) {
+            sessionId = 'sess_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now();
+        }
+        localStorage.setItem("gumruk_session_id", sessionId);
+    }
+    return sessionId;
+}
+const sessionId = getOrCreateSessionId();
+
 // DOM Elements
 const connectionDot = document.getElementById("connection-status-dot");
 const connectionText = document.getElementById("connection-status-text");
@@ -41,6 +58,11 @@ document.addEventListener("DOMContentLoaded", () => {
     loadExcelData();
     connectWebSocket();
     setupFileUpload();
+    
+    // Set the session ID on download button
+    if (btnDownload) {
+        btnDownload.href = `/api/download?session_id=${sessionId}`;
+    }
     
     // Event listeners
     btnStart.addEventListener("click", startAutomation);
@@ -78,7 +100,7 @@ function switchTab(tabId) {
 // Load Excel data from backend API
 async function loadExcelData() {
     try {
-        const res = await fetch("/api/data");
+        const res = await fetch(`/api/data?session_id=${sessionId}`);
         const json = await res.json();
         if (json.success) {
             allRows = json.data;
@@ -110,7 +132,7 @@ async function loadExcelData() {
 // Connect to WebSocket backend
 function connectWebSocket() {
     const loc = window.location;
-    const wsUri = (loc.protocol === "https:" ? "wss://" : "ws://") + loc.host + "/ws";
+    const wsUri = (loc.protocol === "https:" ? "wss://" : "ws://") + loc.host + `/ws?session_id=${sessionId}`;
     
     addTerminalLine("[SİSTEM] WebSocket sunucusuna bağlanılıyor...", "system");
     socket = new WebSocket(wsUri);
@@ -289,8 +311,9 @@ function handleWebSocketMessage(msg) {
             
         case "row_fail":
             queryStatus[msg.row] = { intac: "", status: "Başarısız" };
+            startCooldown(msg.gcb);
             updateRowUIStatus(msg.row, "Başarısız", "badge-fail", null, msg.gcb);
-            addTerminalLine(`[BAŞARISIZ] Satır ${msg.row} sorgulama başarısız oldu: ${msg.message}`, "error");
+            addTerminalLine(`[BAŞARISIZ] Satır ${msg.row} sorgulama başarısız oldu: ${msg.message}. 5 dakika sorgu soğuma süresi başlatıldı.`, "error");
             
             const cacheRowIdxFail = allRows.findIndex(r => r.row === msg.row);
             if (cacheRowIdxFail !== -1) {
@@ -600,7 +623,7 @@ async function uploadExcelFile(file) {
     formData.append("file", file);
     
     try {
-        const res = await fetch("/api/upload", {
+        const res = await fetch(`/api/upload?session_id=${sessionId}`, {
             method: "POST",
             body: formData
         });

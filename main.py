@@ -30,40 +30,17 @@ else:
 EXCEL_PATH = os.path.join(BASE_DIR, "EXPORT.XLSX")
 EXCEL_CUSTOM_PATH = os.path.join(BASE_DIR, "EXPORT_CUSTOM.XLSX")
 
-# Global configuration to track active Excel file
-active_excel_path = EXCEL_PATH
-
-gcb_col_idx = 9
-date_col_idx = 12
-fatura_col_idx = 1
-firma_col_idx = 3
-headers_list = []
-
-# Keep track of active WebSocket connections
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: List[WebSocket] = []
-
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
-
-    def disconnect(self, websocket: WebSocket):
-        if websocket in self.active_connections:
-            self.active_connections.remove(websocket)
-
-    async def broadcast(self, message: dict):
-        for connection in self.active_connections:
-            try:
-                await connection.send_json(message)
-            except Exception:
-                pass
-
-manager = ConnectionManager()
-
-# Background task state
-class ScraperState:
-    def __init__(self):
+# Global sessions registry mapping session_id -> UserSessionState
+class UserSessionState:
+    def __init__(self, session_id: str):
+        self.session_id = session_id
+        self.active_excel_path = None
+        self.gcb_col_idx = 9
+        self.date_col_idx = 12
+        self.fatura_col_idx = 1
+        self.firma_col_idx = 3
+        
+        # Scraper state fields
         self.is_running = False
         self.task = None
         self.cancel_event = threading.Event()
@@ -71,7 +48,49 @@ class ScraperState:
         self.total_count = 0
         self.log_history = []
 
-state = ScraperState()
+sessions: Dict[str, UserSessionState] = {}
+
+def get_session(session_id: str) -> UserSessionState:
+    if not session_id:
+        session_id = "default_session"
+    if session_id not in sessions:
+        sessions[session_id] = UserSessionState(session_id)
+    return sessions[session_id]
+
+# Keep track of active WebSocket connections per session
+class ConnectionManager:
+    def __init__(self):
+        # session_id -> List[WebSocket]
+        self.active_connections: Dict[str, List[WebSocket]] = {}
+
+    async def connect(self, session_id: str, websocket: WebSocket):
+        await websocket.accept()
+        if not session_id:
+            session_id = "default_session"
+        if session_id not in self.active_connections:
+            self.active_connections[session_id] = []
+        self.active_connections[session_id].append(websocket)
+
+    def disconnect(self, session_id: str, websocket: WebSocket):
+        if not session_id:
+            session_id = "default_session"
+        if session_id in self.active_connections:
+            if websocket in self.active_connections[session_id]:
+                self.active_connections[session_id].remove(websocket)
+            if not self.active_connections[session_id]:
+                del self.active_connections[session_id]
+
+    async def broadcast_to_session(self, session_id: str, message: dict):
+        if not session_id:
+            session_id = "default_session"
+        if session_id in self.active_connections:
+            for connection in self.active_connections[session_id]:
+                try:
+                    await connection.send_json(message)
+                except Exception:
+                    pass
+
+manager = ConnectionManager()
 
 def normalize_turkish(text: str) -> str:
     if not text:
@@ -178,17 +197,21 @@ def parse_custom_line(line: str):
     return gcb, "", ""
 
 def read_excel_data(file_path: str) -> Dict[str, Any]:
-    global gcb_col_idx, date_col_idx, fatura_col_idx, firma_col_idx, headers_list
-    
     # Reset defaults in case of empty or missing spreadsheet
-    gcb_col_idx = -1
-    date_col_idx = -1
-    fatura_col_idx = -1
-    firma_col_idx = -1
-    headers_list = []
+    gcb_col_idx = 9
+    date_col_idx = 12
+    fatura_col_idx = 1
+    firma_col_idx = 3
     
     if not file_path or not os.path.exists(file_path):
-        return {"headers": [], "rows": []}
+        return {
+            "headers": [], 
+            "rows": [], 
+            "gcb_col_idx": gcb_col_idx, 
+            "date_col_idx": date_col_idx, 
+            "fatura_col_idx": fatura_col_idx, 
+            "firma_col_idx": firma_col_idx
+        }
     
     wb = openpyxl.load_workbook(file_path, data_only=True)
     ws = wb.active
@@ -240,8 +263,6 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
         except Exception as e:
             print("Warning: Could not automatically append date column:", e)
               
-    headers_list = headers
-    
     rows = []
     for r in range(2, ws.max_row + 1):
         row_values = []
@@ -283,7 +304,14 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
         })
         
     wb.close()
-    return {"headers": headers, "rows": rows}
+    return {
+        "headers": headers, 
+        "rows": rows, 
+        "gcb_col_idx": gcb_col_idx, 
+        "date_col_idx": date_col_idx, 
+        "fatura_col_idx": fatura_col_idx, 
+        "firma_col_idx": firma_col_idx
+    }
 
 def get_writable_path(base_dir: str, filename: str) -> str:
     name, ext = os.path.splitext(filename)
@@ -329,7 +357,7 @@ def write_excel_date(file_path: str, row_idx: int, date_str: str) -> bool:
     except (PermissionError, IOError):
         return False
 
-def generate_custom_excel(parsed_items: List[dict]):
+def generate_custom_excel(parsed_items: List[dict], custom_path: str):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Sorgu Sonuçları"
@@ -356,7 +384,7 @@ def generate_custom_excel(parsed_items: List[dict]):
     # Format as professional table
     apply_table_formatting_to_sheet(ws)
     
-    wb.save(EXCEL_CUSTOM_PATH)
+    wb.save(custom_path)
     wb.close()
 
 # Endpoints
@@ -373,9 +401,10 @@ def get_js():
     return FileResponse("app.js", media_type="application/javascript")
 
 @app.get("/api/data")
-def get_data():
+def get_data(session_id: str = None):
+    session = get_session(session_id)
     try:
-        if not active_excel_path or not os.path.exists(active_excel_path):
+        if not session.active_excel_path or not os.path.exists(session.active_excel_path):
             return JSONResponse(content={
                 "success": True, 
                 "data": [], 
@@ -389,93 +418,107 @@ def get_data():
         
         # Ensure active excel file is formatted properly
         try:
-            wb_write = openpyxl.load_workbook(active_excel_path)
+            wb_write = openpyxl.load_workbook(session.active_excel_path)
             ws_write = wb_write.active
             apply_table_formatting_to_sheet(ws_write)
-            wb_write.save(active_excel_path)
+            wb_write.save(session.active_excel_path)
             wb_write.close()
         except Exception as ex:
             print("Error formatting excel file on data load:", ex)
             
-        res = read_excel_data(active_excel_path)
+        res = read_excel_data(session.active_excel_path)
+        session.gcb_col_idx = res["gcb_col_idx"]
+        session.date_col_idx = res["date_col_idx"]
+        session.fatura_col_idx = res["fatura_col_idx"]
+        session.firma_col_idx = res["firma_col_idx"]
+        
         return JSONResponse(content={
             "success": True, 
             "data": res["rows"], 
             "headers": res["headers"],
-            "gcb_col_idx": gcb_col_idx,
-            "date_col_idx": date_col_idx,
-            "fatura_col_idx": fatura_col_idx,
-            "firma_col_idx": firma_col_idx,
-            "active_file": os.path.basename(active_excel_path)
+            "gcb_col_idx": session.gcb_col_idx,
+            "date_col_idx": session.date_col_idx,
+            "fatura_col_idx": session.fatura_col_idx,
+            "firma_col_idx": session.firma_col_idx,
+            "active_file": os.path.basename(session.active_excel_path)
         })
     except Exception as e:
         return JSONResponse(status_code=500, content={"success": False, "message": str(e)})
 
 @app.post("/api/upload")
-async def upload_file(file: UploadFile = File(...)):
-    global active_excel_path
+async def upload_file(session_id: str = None, file: UploadFile = File(...)):
+    session = get_session(session_id)
     try:
         content = await file.read()
-        save_path = get_writable_path(BASE_DIR, file.filename)
+        # Prepend session_id to file name to isolate user uploads
+        filename = f"{session.session_id}_{file.filename}"
+        save_path = get_writable_path(BASE_DIR, filename)
         with open(save_path, "wb") as f:
             f.write(content)
-        active_excel_path = save_path
+        session.active_excel_path = save_path
         
         # Ensure active excel file is formatted properly
         try:
-            wb_write = openpyxl.load_workbook(active_excel_path)
+            wb_write = openpyxl.load_workbook(session.active_excel_path)
             ws_write = wb_write.active
             apply_table_formatting_to_sheet(ws_write)
-            wb_write.save(active_excel_path)
+            wb_write.save(session.active_excel_path)
             wb_write.close()
         except Exception as ex:
             print("Error formatting excel file on upload:", ex)
             
-        res = read_excel_data(active_excel_path)
+        res = read_excel_data(session.active_excel_path)
+        session.gcb_col_idx = res["gcb_col_idx"]
+        session.date_col_idx = res["date_col_idx"]
+        session.fatura_col_idx = res["fatura_col_idx"]
+        session.firma_col_idx = res["firma_col_idx"]
+        
         return JSONResponse(content={
             "success": True, 
-            "message": f"Excel dosyası '{os.path.basename(active_excel_path)}' başarıyla yüklendi.", 
+            "message": f"Excel dosyası '{os.path.basename(session.active_excel_path)}' başarıyla yüklendi.", 
             "data": res["rows"],
             "headers": res["headers"],
-            "gcb_col_idx": gcb_col_idx,
-            "date_col_idx": date_col_idx,
-            "fatura_col_idx": fatura_col_idx,
-            "firma_col_idx": firma_col_idx,
-            "active_file": os.path.basename(active_excel_path)
+            "gcb_col_idx": session.gcb_col_idx,
+            "date_col_idx": session.date_col_idx,
+            "fatura_col_idx": session.fatura_col_idx,
+            "firma_col_idx": session.firma_col_idx,
+            "active_file": os.path.basename(session.active_excel_path)
         })
     except Exception as e:
         return JSONResponse(status_code=500, content={"success": False, "message": f"Yükleme hatası: {str(e)}"})
 
 @app.get("/api/download")
-def download_file():
-    if active_excel_path and os.path.exists(active_excel_path):
-        filename = "EXPORT_UPDATED.XLSX" if active_excel_path == EXCEL_PATH else "EXPORT_CUSTOM_UPDATED.XLSX"
-        return FileResponse(active_excel_path, filename=filename, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+def download_file(session_id: str = None):
+    session = get_session(session_id)
+    if session.active_excel_path and os.path.exists(session.active_excel_path):
+        filename = "EXPORT_UPDATED.XLSX"
+        return FileResponse(session.active_excel_path, filename=filename, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     return JSONResponse(status_code=404, content={"success": False, "message": "Excel dosyası bulunamadı veya bağlantı kesildi."})
 
 
-async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
-    state.is_running = True
-    state.cancel_event.clear()
-    state.completed_count = 0
-    state.total_count = len(rows_to_query)
-    state.log_history = []
+async def run_scraper_task(session_id: str, websocket: WebSocket, rows_to_query: List[dict]):
+    session = get_session(session_id)
+    session.is_running = True
+    session.cancel_event.clear()
+    session.completed_count = 0
+    session.total_count = len(rows_to_query)
+    session.log_history = []
     
     loop = asyncio.get_running_loop()
-    excel_path = active_excel_path
+    excel_path = session.active_excel_path
     total_rows = len(rows_to_query)
     
     def ws_send(msg_dict):
         """Thread-safe WebSocket message broadcaster (fire-and-forget, no blocking)."""
         try:
-            asyncio.run_coroutine_threadsafe(manager.broadcast(msg_dict), loop)
+            asyncio.run_coroutine_threadsafe(manager.broadcast_to_session(session_id, msg_dict), loop)
         except Exception:
             pass
     
     def ws_log(msg):
-        state.log_history.append(msg)
-        if len(state.log_history) > 300:
-            state.log_history.pop(0)
+        session.log_history.append(msg)
+        if len(session.log_history) > 300:
+            session.log_history.pop(0)
         ws_send({"type": "log", "message": msg})
     
     def _run_blocking():
@@ -510,12 +553,12 @@ async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
         
         # ── Step 2: Query function ──
         def query_single_gcb(gcb_no: str) -> dict:
-            if state.cancel_event.is_set():
+            if session.cancel_event.is_set():
                 return {"gcb": gcb_no, "result": {"success": False, "status": "İptal", "message": "Durduruldu.", "date": None}}
             
             scraper = HttpCustomsScraper(
                 log_callback=ws_log,
-                cancel_check=lambda: state.cancel_event.is_set()
+                cancel_check=lambda: session.cancel_event.is_set()
             )
             try:
                 result = scraper.query_declaration(gcb_no)
@@ -538,7 +581,7 @@ async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
                 with completed_lock:
                     completed += 1
                     current_completed = completed
-                    state.completed_count = current_completed
+                    session.completed_count = current_completed
                 
                 if result.get("success") and result.get("date"):
                     try:
@@ -547,13 +590,13 @@ async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
                             # Determine date format dynamically from other date columns if not set
                             target_format = 'yyyy-mm-dd'
                             for col in range(1, ws.max_column + 1):
-                                if col != date_col_idx:
+                                if col != session.date_col_idx:
                                     fmt = ws.cell(row=row_idx, column=col).number_format
                                     if fmt and any(c in fmt.lower() for c in ['y', 'm', 'd']):
                                         target_format = fmt
                                         break
                             
-                            cell = ws.cell(row=row_idx, column=date_col_idx, value=date_obj)
+                            cell = ws.cell(row=row_idx, column=session.date_col_idx, value=date_obj)
                             cell.number_format = target_format
                             
                             # Periodically save progress to disk (every 5 rows or on final row)
@@ -584,7 +627,7 @@ async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
             with ThreadPoolExecutor(max_workers=num_workers) as executor:
                 future_to_gcb = {}
                 for idx, gcb in enumerate(unique_gcbs):
-                    if state.cancel_event.is_set():
+                    if session.cancel_event.is_set():
                         break
                     
                     # Submit task to pool
@@ -595,7 +638,7 @@ async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
                     time.sleep(0.3)
                 
                 for future in as_completed(future_to_gcb):
-                    if state.cancel_event.is_set():
+                    if session.cancel_event.is_set():
                         for f in future_to_gcb:
                             f.cancel()
                         ws_log("[SİSTEM] Sorgulama durduruldu.")
@@ -624,7 +667,7 @@ async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
         # Run ALL blocking work in a separate thread so asyncio event loop stays free
         await loop.run_in_executor(None, _run_blocking)
         
-        if state.cancel_event.is_set():
+        if session.cancel_event.is_set():
             await websocket.send_json({"type": "stopped", "message": "Sorgulama durduruldu."})
         else:
             await websocket.send_json({"type": "finished"})
@@ -634,30 +677,35 @@ async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
         except Exception:
             pass
     finally:
-        state.is_running = False
-        state.task = None
+        session.is_running = False
+        session.task = None
 
 
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    global active_excel_path
-    await manager.connect(websocket)
+async def websocket_endpoint(websocket: WebSocket, session_id: str = None):
+    session = get_session(session_id)
+    await manager.connect(session_id, websocket)
     
     # Send initial state to the newly connected client
-    res = read_excel_data(active_excel_path)
+    res = read_excel_data(session.active_excel_path)
+    session.gcb_col_idx = res["gcb_col_idx"]
+    session.date_col_idx = res["date_col_idx"]
+    session.fatura_col_idx = res["fatura_col_idx"]
+    session.firma_col_idx = res["firma_col_idx"]
+    
     await websocket.send_json({
         "type": "init_state",
-        "is_running": state.is_running,
-        "completed": state.completed_count,
-        "total": state.total_count,
-        "active_file": os.path.basename(active_excel_path) if active_excel_path else None,
-        "log_history": state.log_history,
+        "is_running": session.is_running,
+        "completed": session.completed_count,
+        "total": session.total_count,
+        "active_file": os.path.basename(session.active_excel_path) if session.active_excel_path else None,
+        "log_history": session.log_history,
         "data": res["rows"],
         "headers": res["headers"],
-        "gcb_col_idx": gcb_col_idx,
-        "date_col_idx": date_col_idx,
-        "fatura_col_idx": fatura_col_idx,
-        "firma_col_idx": firma_col_idx,
+        "gcb_col_idx": session.gcb_col_idx,
+        "date_col_idx": session.date_col_idx,
+        "fatura_col_idx": session.fatura_col_idx,
+        "firma_col_idx": session.firma_col_idx,
     })
     try:
         while True:
@@ -670,11 +718,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 continue
                 
             if action == "start_all":
-                if state.is_running:
+                if session.is_running:
                     await websocket.send_json({"type": "log", "message": "Sorgulama zaten çalışıyor."})
                     continue
                 
-                res = read_excel_data(active_excel_path)
+                res = read_excel_data(session.active_excel_path)
                 excel_rows = res["rows"]
                 pending = [r for r in excel_rows if not r["intac"] and r["gcb"]]
                 
@@ -684,10 +732,10 @@ async def websocket_endpoint(websocket: WebSocket):
                     continue
                 
                 await websocket.send_json({"type": "log", "message": f"Sorgulanacak {len(pending)} beyanname bulundu. İşlem başlatılıyor..."})
-                state.task = asyncio.create_task(run_scraper_task(websocket, pending))
+                session.task = asyncio.create_task(run_scraper_task(session_id, websocket, pending))
                 
             elif action == "start_custom_list":
-                if state.is_running:
+                if session.is_running:
                     await websocket.send_json({"type": "log", "message": "Sorgulama zaten çalışıyor."})
                     continue
                 
@@ -716,28 +764,32 @@ async def websocket_endpoint(websocket: WebSocket):
                 
                 await websocket.send_json({"type": "log", "message": f"Ayrıştırma başarılı: {len(parsed_items)} adet beyanname bulundu."})
                 
-                # Generate new custom Excel
-                generate_custom_excel(parsed_items)
-                active_excel_path = EXCEL_CUSTOM_PATH
+                # Generate new custom Excel with unique session id
+                session_custom_path = os.path.join(BASE_DIR, f"EXPORT_CUSTOM_{session_id}.xlsx")
+                generate_custom_excel(parsed_items, session_custom_path)
+                session.active_excel_path = session_custom_path
                 
                 # Fetch fresh rows of the newly created custom Excel
-                res = read_excel_data(active_excel_path)
-                custom_rows = res["rows"]
+                res = read_excel_data(session.active_excel_path)
+                session.gcb_col_idx = res["gcb_col_idx"]
+                session.date_col_idx = res["date_col_idx"]
+                session.fatura_col_idx = res["fatura_col_idx"]
+                session.firma_col_idx = res["firma_col_idx"]
                 
                 # Send rows back to update client UI
                 await websocket.send_json({
                     "type": "custom_list_loaded",
-                    "data": custom_rows,
+                    "data": res["rows"],
                     "headers": res["headers"],
-                    "gcb_col_idx": gcb_col_idx,
-                    "date_col_idx": date_col_idx,
-                    "fatura_col_idx": fatura_col_idx,
-                    "firma_col_idx": firma_col_idx,
-                    "active_file": os.path.basename(active_excel_path)
+                    "gcb_col_idx": session.gcb_col_idx,
+                    "date_col_idx": session.date_col_idx,
+                    "fatura_col_idx": session.fatura_col_idx,
+                    "firma_col_idx": session.firma_col_idx,
+                    "active_file": os.path.basename(session.active_excel_path)
                 })
                 
                 await websocket.send_json({"type": "log", "message": "Yeni sorgu tablosu oluşturuldu. Headless sorgular başlatılıyor..."})
-                state.task = asyncio.create_task(run_scraper_task(websocket, custom_rows))
+                session.task = asyncio.create_task(run_scraper_task(session_id, websocket, res["rows"]))
                 
             elif action == "query_single":
                 row_idx = payload.get("row")
@@ -745,21 +797,22 @@ async def websocket_endpoint(websocket: WebSocket):
                 if not row_idx or not gcb:
                     continue
                     
-                if state.is_running:
+                if session.is_running:
                     await websocket.send_json({"type": "log", "message": "Arka planda çalışan bir sorgulama var, tekil sorgu yapılamaz."})
                     continue
                 
                 await websocket.send_json({"type": "log", "message": f"Satır {row_idx} ({gcb}) için tekil sorgulama başlatılıyor..."})
-                state.task = asyncio.create_task(run_scraper_task(websocket, [{"row": row_idx, "gcb": gcb}]))
+                session.task = asyncio.create_task(run_scraper_task(session_id, websocket, [{"row": row_idx, "gcb": gcb}]))
                 
             elif action == "reset_excel":
-                if state.is_running:
+                if session.is_running:
                     await websocket.send_json({"type": "log", "message": "Sorgulama devam ederken tablo sıfırlanamaz."})
                     continue
-                active_excel_path = None
-                if os.path.exists(EXCEL_CUSTOM_PATH):
+                session_custom_path = os.path.join(BASE_DIR, f"EXPORT_CUSTOM_{session_id}.xlsx")
+                session.active_excel_path = None
+                if os.path.exists(session_custom_path):
                     try:
-                        os.remove(EXCEL_CUSTOM_PATH)
+                        os.remove(session_custom_path)
                     except Exception:
                         pass
                 await websocket.send_json({
@@ -775,18 +828,18 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_json({"type": "log", "message": "[SİSTEM] Tablo sıfırlandı. Orijinal Excel bağlantısı kesildi. Yeni görev bekleniyor..."})
                 
             elif action == "stop":
-                if state.is_running:
-                    state.is_running = False
-                    state.cancel_event.set()  # Instant cancel signal
+                if session.is_running:
+                    session.is_running = False
+                    session.cancel_event.set()  # Instant cancel signal
                     await websocket.send_json({"type": "log", "message": "Durdurma sinyali gönderildi — tüm işçiler durduruluyor..."})
                 else:
                     await websocket.send_json({"type": "log", "message": "Çalışan aktif bir sorgulama işlemi yok."})
                     
     except WebSocketDisconnect:
-        manager.disconnect(websocket)
+        manager.disconnect(session_id, websocket)
     except Exception as e:
         print("WebSocket Error:", e)
-        manager.disconnect(websocket)
+        manager.disconnect(session_id, websocket)
 
 if __name__ == "__main__":
     import uvicorn
