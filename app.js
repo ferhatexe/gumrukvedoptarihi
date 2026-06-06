@@ -1,5 +1,5 @@
-// Global state
 let socket = null;
+let heartbeatInterval = null;
 let allRows = [];
 let queryStatus = {}; // Keep track of current session query status per row index
 let activeHeaders = []; // Dynamic headers from active Excel
@@ -121,9 +121,21 @@ function connectWebSocket() {
         btnStart.removeAttribute("disabled");
         btnParseQuery.removeAttribute("disabled");
         addTerminalLine("[SİSTEM] Sunucu bağlantısı sağlandı.", "success");
+        
+        // Start heartbeat ping
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        heartbeatInterval = setInterval(() => {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ action: "ping" }));
+            }
+        }, 25000);
     };
     
     socket.onclose = () => {
+        if (heartbeatInterval) {
+            clearInterval(heartbeatInterval);
+            heartbeatInterval = null;
+        }
         connectionDot.className = "status-dot offline animate-pulse";
         connectionText.innerText = "Çevrimdışı";
         btnStart.setAttribute("disabled", "true");
@@ -146,6 +158,10 @@ function connectWebSocket() {
 // Handle real-time WebSocket messages
 function handleWebSocketMessage(msg) {
     switch (msg.type) {
+        case "pong":
+            // Heartbeat response, ignore
+            break;
+            
         case "log":
             let cls = "";
             const text = msg.message;
@@ -220,9 +236,8 @@ function handleWebSocketMessage(msg) {
             
         case "row_fail":
             queryStatus[msg.row] = { intac: "", status: "Başarısız" };
-            startCooldown(msg.gcb);
             updateRowUIStatus(msg.row, "Başarısız", "badge-fail", null, msg.gcb);
-            addTerminalLine(`[BAŞARISIZ] Satır ${msg.row} sorgulama başarısız oldu: ${msg.message}. 5 dakika sorgu soğuma süresi başlatıldı.`, "error");
+            addTerminalLine(`[BAŞARISIZ] Satır ${msg.row} sorgulama başarısız oldu: ${msg.message}`, "error");
             
             const cacheRowIdxFail = allRows.findIndex(r => r.row === msg.row);
             if (cacheRowIdxFail !== -1) {

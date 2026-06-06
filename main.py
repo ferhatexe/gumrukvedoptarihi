@@ -497,6 +497,10 @@ async def websocket_endpoint(websocket: WebSocket):
             payload = json.loads(data)
             action = payload.get("action")
             
+            if action == "ping":
+                await websocket.send_json({"type": "pong"})
+                continue
+                
             if action == "start_all":
                 if state.is_running:
                     await websocket.send_json({"type": "log", "message": "Sorgulama zaten çalışıyor."})
