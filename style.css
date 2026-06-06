@@ -1,4 +1,4 @@
-/* SWISS-STYLE MONOCHROMATIC DESIGN SYSTEM */
+/* SWISS-STYLE RED & WHITE PREMIUM DESIGN SYSTEM */
 :root {
     --bg-primary: #fafafa;
     --bg-surface: #ffffff;
@@ -6,13 +6,16 @@
     
     --border-light: #e4e4e7;
     --border-medium: #cbd5e1;
-    --border-focus: #09090b;
+    --border-focus: #e53e3e;
     
     --text-primary: #09090b;
     --text-secondary: #71717a;
     --text-muted: #a1a1aa;
     
-    --accent-cobalt: #2563eb;
+    --accent-red: #e53e3e;
+    --accent-red-hover: #c53030;
+    --accent-red-light: #fff5f5;
+    --accent-red-border: #fed7d7;
     
     /* Status Colors (Subtle & High-Contrast) */
     --emerald-bg: #f0fdf4;
@@ -109,7 +112,7 @@ body {
 .logo-icon-svg {
     width: 26px;
     height: 26px;
-    color: var(--text-primary);
+    color: var(--accent-red);
 }
 
 .logo-text h1 {
@@ -278,13 +281,13 @@ body {
 }
 
 .btn-primary {
-    background-color: var(--text-primary);
+    background-color: var(--accent-red);
     color: var(--bg-surface);
-    border-color: var(--text-primary);
+    border-color: var(--accent-red);
 }
 .btn-primary:hover {
-    background-color: #27272a;
-    border-color: #27272a;
+    background-color: var(--accent-red-hover);
+    border-color: var(--accent-red-hover);
 }
 
 .btn-danger {
@@ -371,7 +374,7 @@ body {
 
 .progress-bar-fill {
     height: 100%;
-    background: var(--text-primary);
+    background: var(--accent-red);
     transition: width 0.3s cubic-bezier(0.1, 0.8, 0.25, 1);
 }
 
@@ -453,12 +456,12 @@ body {
 }
 
 .tab-btn.active {
-    color: var(--text-primary);
-    border-bottom-color: var(--text-primary);
+    color: var(--accent-red);
+    border-bottom-color: var(--accent-red);
     background: var(--bg-surface);
 }
 .tab-btn.active .tab-icon-svg {
-    color: var(--text-primary);
+    color: var(--accent-red);
 }
 
 /* TAB CONTAINER BODY */
@@ -900,10 +903,10 @@ body {
 }
 
 .designer-link:hover {
-    background-color: var(--text-primary);
+    background-color: var(--accent-red);
     color: var(--bg-surface);
-    border-color: var(--text-primary);
-    box-shadow: 0 0 12px rgba(9, 9, 11, 0.15);
+    border-color: var(--accent-red);
+    box-shadow: 0 0 12px rgba(229, 62, 62, 0.25);
     transform: translateY(-1px);
 }
 
@@ -988,4 +991,90 @@ body {
 
 .row-updating {
     animation: row-flash 2.5s ease-out;
+}
+
+/* PRELOADER STYLING */
+.preloader-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: #09090b; /* Very dark background */
+    z-index: 99999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: transform 0.6s cubic-bezier(0.85, 0, 0.15, 1), opacity 0.6s ease;
+}
+
+.preloader-overlay.fade-out {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-100%);
+}
+
+.preloader-content {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.terminal-loader {
+    font-family: var(--font-mono);
+    font-size: 2.8rem;
+    font-weight: 800;
+    color: #ffffff;
+    letter-spacing: 0.05em;
+    text-shadow: 0 0 15px rgba(229, 62, 62, 0.4);
+}
+
+.typing-text {
+    background: linear-gradient(90deg, #ffffff 0%, #ff4b4b 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.cursor {
+    color: #e53e3e;
+    animation: blink 0.8s step-end infinite;
+}
+
+.progress-bar-loader {
+    width: 240px;
+    height: 3px;
+    background-color: #27272a;
+    border-radius: 2px;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-bar-fill-loader {
+    height: 100%;
+    width: 0%;
+    background-color: #e53e3e;
+    box-shadow: 0 0 8px #e53e3e;
+    animation: load-progress 1.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes blink {
+    from, to { opacity: 1; }
+    50% { opacity: 0; }
+}
+
+@keyframes load-progress {
+    0% { width: 0%; }
+    50% { width: 60%; }
+    100% { width: 100%; }
+}
+
+@keyframes text-pulse {
+    from {
+        text-shadow: 0 0 10px rgba(229, 62, 62, 0.4);
+    }
+    to {
+        text-shadow: 0 0 25px rgba(229, 62, 62, 0.8), 0 0 50px rgba(229, 62, 62, 0.4);
+    }
 }
