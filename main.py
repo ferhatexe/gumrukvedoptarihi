@@ -552,6 +552,10 @@ async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
             for item in rows_for_gcb:
                 row_idx = item["row"]
                 
+                with completed_lock:
+                    completed += 1
+                    current_completed = completed
+                
                 if result.get("success") and result.get("date"):
                     try:
                         date_obj = datetime.strptime(result["date"], "%Y-%m-%d").date()
@@ -568,8 +572,11 @@ async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
                             cell = ws.cell(row=row_idx, column=date_col_idx, value=date_obj)
                             cell.number_format = target_format
                             
-                            apply_table_formatting_to_sheet(ws)
-                            wb.save(excel_path)
+                            # Periodically save progress to disk (every 5 rows or on final row)
+                            if current_completed % 5 == 0 or current_completed == total_rows:
+                                apply_table_formatting_to_sheet(ws)
+                                wb.save(excel_path)
+                                
                         ws_send({"type": "row_success", "row": row_idx, "gcb": gcb_no, "date": result["date"]})
                     except Exception as e:
                         ws_send({"type": "row_fail", "row": row_idx, "gcb": gcb_no, "message": f"Excel yazma hatası: {str(e)}"})
@@ -578,12 +585,11 @@ async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
                 else:
                     ws_send({"type": "row_fail", "row": row_idx, "gcb": gcb_no, "message": result.get("message", "Sorgulama hatası.")})
                 
-                with completed_lock:
-                    completed += 1
-                    ws_send({"type": "progress", "completed": completed, "total": total_rows})
+                ws_send({"type": "progress", "completed": current_completed, "total": total_rows})
         
-        # ── Step 4: Run Sequentially (Single Worker) ──
-        ws_log(f"[SİSTEM] Sıralı sorgulama başlatılıyor (Sunucu race-condition hatasını önlemek için tekil işçi)...")
+        # ── Step 4: Run in Parallel (Staggered Startup) ──
+        num_workers = min(15, total_unique)
+        ws_log(f"[SİSTEM] {num_workers} paralel işçi başlatılıyor (Gecikmeli başlangıç ile çakışma önlenecek)...")
         
         # Mark all rows as started
         for gcb_no, rows in gcb_groups.items():
@@ -591,21 +597,33 @@ async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
                 ws_send({"type": "row_start", "row": item["row"], "gcb": gcb_no})
         
         try:
-            for idx, gcb in enumerate(unique_gcbs):
-                if state.cancel_event.is_set():
-                    ws_log("[SİSTEM] Sorgulama durduruldu.")
-                    break
+            with ThreadPoolExecutor(max_workers=num_workers) as executor:
+                future_to_gcb = {}
+                for idx, gcb in enumerate(unique_gcbs):
+                    if state.cancel_event.is_set():
+                        break
+                    
+                    # Submit task to pool
+                    future = executor.submit(query_single_gcb, gcb)
+                    future_to_gcb[future] = gcb
+                    
+                    # Stagger thread starts by 300ms to prevent server-side session race conditions
+                    time.sleep(0.3)
                 
-                try:
-                    data = query_single_gcb(gcb)
-                    process_result(data["gcb"], data["result"])
-                except Exception as e:
-                    ws_log(f"[HATA] {gcb}: {str(e)}")
-                    process_result(gcb, {"success": False, "status": "Hata", "message": str(e), "date": None})
-                
-                # Add a small delay between queries to prevent portal rate limits
-                if idx < len(unique_gcbs) - 1 and not state.cancel_event.is_set():
-                    time.sleep(1.0)
+                for future in as_completed(future_to_gcb):
+                    if state.cancel_event.is_set():
+                        for f in future_to_gcb:
+                            f.cancel()
+                        ws_log("[SİSTEM] Sorgulama durduruldu.")
+                        break
+                    
+                    try:
+                        data = future.result()
+                        process_result(data["gcb"], data["result"])
+                    except Exception as e:
+                        gcb = future_to_gcb[future]
+                        ws_log(f"[HATA] {gcb}: {str(e)}")
+                        process_result(gcb, {"success": False, "status": "Hata", "message": str(e), "date": None})
         finally:
             try:
                 with excel_lock:

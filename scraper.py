@@ -526,6 +526,8 @@ class HttpCustomsScraper:
                 # ── Retryable results: keep going ──
                 if result['status'] == 'CaptchaWrong':
                     self.log(f"[{gcb_no}] Deneme {attempt}: Güvenlik kodu yanlış ('{ocr_text}' -> {solution})")
+                    import random
+                    time.sleep(0.2 + random.random() * 0.8)
                     continue
 
                 if result['status'] == 'RateLimit':

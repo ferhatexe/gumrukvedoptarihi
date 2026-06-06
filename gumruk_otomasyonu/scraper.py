@@ -262,6 +262,17 @@ def solve_captcha(img_data):
         left_segs = all_segs[:best_op_idx]
         right_segs = all_segs[best_op_idx + 1:]
 
+        # Extract and classify the operator
+        op_char = '+'
+        if 0 <= best_op_idx < len(all_segs):
+            op_s, op_e = all_segs[best_op_idx]
+            op_bmp, op_sw, op_sh = _extract_bitmap(cleaned, h, op_s, op_e)
+            if op_bmp is not None:
+                if op_sh <= 3 or op_sh < op_sw * 0.5:
+                    op_char = '-'
+                else:
+                    op_char = '+'
+
         # Classify left segments as digits
         left_digits = []
         for s, e in left_segs:
@@ -287,7 +298,7 @@ def solve_captcha(img_data):
 
         left_str = "".join(left_digits)
         right_str = "".join(right_digits)
-        expr = f"{left_str}+{right_str}"
+        expr = f"{left_str}{op_char}{right_str}"
 
         try:
             n1 = int(left_str)
@@ -295,8 +306,12 @@ def solve_captcha(img_data):
         except ValueError:
             return None, expr
 
-        result = n1 + n2
-        if 0 <= result <= 200:
+        if op_char == '-':
+            result = n1 - n2
+        else:
+            result = n1 + n2
+
+        if -100 <= result <= 200:
             return str(result), expr
         return None, f"{expr}={result} out of range"
 
@@ -511,16 +526,13 @@ class HttpCustomsScraper:
                 # ── Retryable results: keep going ──
                 if result['status'] == 'CaptchaWrong':
                     self.log(f"[{gcb_no}] Deneme {attempt}: Güvenlik kodu yanlış ('{ocr_text}' -> {solution})")
+                    import random
+                    time.sleep(0.2 + random.random() * 0.8)
                     continue
 
                 if result['status'] == 'RateLimit':
-                    wait_secs = self._parse_wait_seconds(result.get('message', ''))
-                    wait_min = wait_secs // 60
-                    wait_sec = wait_secs % 60
-                    self.log(f"[{gcb_no}] Deneme {attempt}: Bekleme süresi — {wait_min}dk {wait_sec}sn bekleniyor...")
-                    if self._interruptible_sleep(wait_secs, log_msg_prefix=f"[{gcb_no}] Soğuma süresi bekleniyor"):
-                        return {"success": False, "status": "İptal", "message": "Durduruldu.", "date": None}
-                    continue
+                    # Return immediately without sleeping, let the client handle the cooldown
+                    return result
 
                 # Non-finalized results (Tarih Okunamadı, Sistem Uyarısı, Bilinmeyen etc.)
                 # Log and retry
