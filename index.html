@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gümrük Beyanname Sorgulama Otomasyonu</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- HEADER -->
+        <header class="app-header glass">
+            <div class="logo-area">
+                <svg class="logo-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                </svg>
+                <div class="logo-text">
+                    <h1>Gümrük Beyanname Sorgulama</h1>
+                    <p class="subtitle">İntaç Tarihi Çekici ve Excel Güncelleyici</p>
+                </div>
+            </div>
+            <div class="status-area">
+                <span id="active-file-badge" class="active-file-text">Aktif Dosya: EXPORT.XLSX</span>
+                <span id="connection-status-dot" class="status-dot offline"></span>
+                <span id="connection-status-text" class="status-text">Bağlanıyor...</span>
+            </div>
+        </header>
+
+        <!-- STATS GRID -->
+        <section class="stats-grid">
+            <div class="stat-card glass">
+                <div class="stat-info">
+                    <span class="stat-label">Toplam Satır</span>
+                    <span id="stat-total" class="stat-value">0</span>
+                </div>
+                <div class="stat-icon-wrapper bg-indigo-light">
+                    <svg class="stat-icon-svg text-indigo" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75" />
+                    </svg>
+                </div>
+            </div>
+            <div class="stat-card glass">
+                <div class="stat-info">
+                    <span class="stat-label">İntaç Tarihi Olan</span>
+                    <span id="stat-completed" class="stat-value">0</span>
+                </div>
+                <div class="stat-icon-wrapper bg-emerald-light">
+                    <svg class="stat-icon-svg text-emerald" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </div>
+            </div>
+            <div class="stat-card glass">
+                <div class="stat-info">
+                    <span class="stat-label">Sorgu Bekleyen</span>
+                    <span id="stat-pending" class="stat-value">0</span>
+                </div>
+                <div class="stat-icon-wrapper bg-amber-light">
+                    <svg class="stat-icon-svg text-amber" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </div>
+            </div>
+            <div class="stat-card glass">
+                <div class="stat-info">
+                    <span class="stat-label">Hatalı / Kapanmamış</span>
+                    <span id="stat-errors" class="stat-value">0</span>
+                </div>
+                <div class="stat-icon-wrapper bg-red-light">
+                    <svg class="stat-icon-svg text-red" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                    </svg>
+                </div>
+            </div>
+        </section>
+
+        <!-- ACTION TOOLBAR -->
+        <section class="toolbar glass">
+            <div class="action-buttons">
+                <button id="btn-start" class="btn btn-primary" disabled>
+                    <svg class="btn-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+                    </svg>
+                    Otomatik Sorgula
+                </button>
+                <button id="btn-stop" class="btn btn-danger" disabled>
+                    <svg class="btn-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" />
+                    </svg>
+                    Durdur
+                </button>
+                <button id="btn-reset-list" class="btn btn-secondary">
+                    <svg class="btn-icon-svg refresh-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                    </svg>
+                    Tabloyu Sıfırla
+                </button>
+                <a href="/api/download" id="btn-download" class="btn btn-success">
+                    <svg class="btn-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                    </svg>
+                    Güncel Excel'i İndir
+                </a>
+            </div>
+            <div class="progress-container">
+                <div class="progress-label">
+                    <span>Sorgulama İlerleme</span>
+                    <span id="progress-percent">0%</span>
+                </div>
+                <div class="progress-bar-bg">
+                    <div id="progress-bar-fill" class="progress-bar-fill" style="width: 0%"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- MAIN CONTENT PANEL (GRID) -->
+        <div class="main-panel">
+            <!-- LEFT COLUMN: TABBED CONTROL CENTER -->
+            <section class="panel-section control-panel glass">
+                <div class="tabs-header">
+                    <button class="tab-btn active" data-tab="tab-input">
+                        <svg class="tab-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                        </svg>
+                        Veri Girişi & Excel
+                    </button>
+                    <button class="tab-btn" data-tab="tab-terminal">
+                        <svg class="tab-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
+                        </svg>
+                        Sistem Logları
+                    </button>
+                </div>
+                
+                <div class="tab-content-container">
+                    <!-- TAB 1: DATA INPUT -->
+                    <div id="tab-input" class="tab-content active">
+                        <div class="input-panel-body">
+                            <!-- Raw list paste area -->
+                            <div class="textarea-container">
+                                <label for="raw-input" class="input-label-tag">Beyanname Listesi (Serbest Metin Girişi)</label>
+                                <textarea id="raw-input" placeholder="Verileri buraya yapıştırın (Her satırda Beyanname, Firma ve Fatura karışık sırada bulunabilir)...&#10;Örn:&#10;26341200EX00137190 MEDIKA GMBH BT12026000000561"></textarea>
+                                <button id="btn-parse-query" class="btn btn-primary btn-full-width">
+                                    <svg class="btn-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                                    </svg>
+                                    Ayrıştır & Sorgula
+                                </button>
+                                <div class="info-tip-box">
+                                    <svg class="info-tip-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 111.063.852l-.708.283a.75.75 0 00-.475.694V15.75m0-6h.008v.008H12V9.75zM21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span>Gümrük kısıtlamaları nedeniyle bir beyanname en sık 5 dakikada bir sorgulanabilmektedir.</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Drag-and-drop excel upload -->
+                            <div class="upload-container">
+                                <label class="input-label-tag">Yeni Excel Dosyası Yükle</label>
+                                <div id="drop-zone" class="drop-zone">
+                                    <svg class="upload-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                                    </svg>
+                                    <span class="drop-zone-text">Yeni Dosyayı Sürükleyin veya Dosya Seçin</span>
+                                    <input type="file" id="file-input" accept=".xlsx" style="display: none;">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- TAB 2: TERMINAL LOGS -->
+                    <div id="tab-terminal" class="tab-content">
+                        <div class="terminal-wrapper">
+                            <div class="terminal-toolbar">
+                                <span class="terminal-status-indicator">● Canlı Log Akışı</span>
+                                <button id="btn-clear-terminal" class="btn-text">Temizle</button>
+                            </div>
+                            <div id="terminal" class="terminal-body">
+                                <div class="terminal-line system">[SİSTEM] Web uygulaması başlatıldı. WebSocket bağlantısı bekleniyor...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- RIGHT COLUMN: EXCEL GRID VIEW -->
+            <section class="panel-section grid-panel glass">
+                <div class="panel-header">
+                    <h2>Excel Veri Tablosu</h2>
+                    <div class="header-actions">
+                        <select id="filter-status" class="filter-select">
+                            <option value="all">DURUM: TÜMÜ</option>
+                            <option value="İntaç Tarihi Var">İntaç Tarihi Var</option>
+                            <option value="Bekliyor">Bekliyor</option>
+                            <option value="Kapanmamış">Kapanmamış</option>
+                            <option value="Başarısız">Başarısız</option>
+                        </select>
+                        <select id="filter-type" class="filter-select">
+                            <option value="all">TÜR: TÜMÜ</option>
+                            <option value="beyanname">BEYANNAME</option>
+                            <option value="etgb">ETGB</option>
+                        </select>
+                        <div class="search-box">
+                            <svg class="search-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.637 10.637z" />
+                            </svg>
+                            <input type="text" id="search-input" placeholder="GCB, Fatura veya Firma ara...">
+                        </div>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead id="table-headers">
+                            <tr>
+                                <th>Satır</th>
+                                <th>Fatura No</th>
+                                <th>Firma Adı</th>
+                                <th>Beyanname (GCB) No</th>
+                                <th>Gümrük İntaç Tarihi</th>
+                                <th>Durum</th>
+                                <th>Eylem</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-body">
+                            <tr>
+                                <td colspan="7" class="loading-cell">Excel verileri yükleniyor...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div> <!-- end of main-panel -->
+
+        <!-- FOOTER -->
+        <footer class="app-footer">
+            <div class="footer-content">
+                <p>Gümrük Beyanname Sorgulama Otomasyonu &copy; 2026</p>
+                <div class="designer-badge">
+                    <span>Tasarım & Geliştirme:</span>
+                    <a href="https://github.com/ferhatexe" target="_blank" class="designer-link">
+                        <svg class="sparkle-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                            <path d="M12 2l2.4 7.2h7.6l-6.1 4.5 2.3 7.3-6.2-4.6-6.2 4.6 2.3-7.3-6.1-4.5h7.6z"/>
+                        </svg>
+                        ferhatexe
+                    </a>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
