@@ -380,6 +380,14 @@ async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
         completed_lock = threading.Lock()
         excel_lock = threading.Lock()
         
+        # Load the workbook once at the start of the task
+        try:
+            wb = openpyxl.load_workbook(excel_path)
+            ws = wb.active
+        except Exception as e:
+            ws_log(f"[HATA] Excel dosyası okunamadı: {str(e)}")
+            return
+        
         # ── Step 1: Deduplicate GCB numbers ──
         gcb_groups: Dict[str, List[dict]] = {}
         for item in rows_to_query:
@@ -424,12 +432,24 @@ async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
                 row_idx = item["row"]
                 
                 if result.get("success") and result.get("date"):
-                    with excel_lock:
-                        success_write = write_excel_date(excel_path, row_idx, result["date"])
-                    if success_write:
+                    try:
+                        date_obj = datetime.strptime(result["date"], "%Y-%m-%d").date()
+                        with excel_lock:
+                            # Determine date format dynamically from other date columns if not set
+                            target_format = 'yyyy-mm-dd'
+                            for col in range(1, ws.max_column + 1):
+                                if col != date_col_idx:
+                                    fmt = ws.cell(row=row_idx, column=col).number_format
+                                    if fmt and any(c in fmt.lower() for c in ['y', 'm', 'd']):
+                                        target_format = fmt
+                                        break
+                            
+                            cell = ws.cell(row=row_idx, column=date_col_idx, value=date_obj)
+                            cell.number_format = target_format
+                            wb.save(excel_path)
                         ws_send({"type": "row_success", "row": row_idx, "gcb": gcb_no, "date": result["date"]})
-                    else:
-                        ws_send({"type": "row_fail", "row": row_idx, "gcb": gcb_no, "message": "Excel dosyası kilitli olduğu için yazılamadı."})
+                    except Exception as e:
+                        ws_send({"type": "row_fail", "row": row_idx, "gcb": gcb_no, "message": f"Excel yazma hatası: {str(e)}"})
                 elif result.get("success") and result.get("status") == "Kapanmamış":
                     ws_send({"type": "row_not_closed", "row": row_idx, "gcb": gcb_no, "message": "Beyanname kapanmamış."})
                 else:
@@ -440,34 +460,40 @@ async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
                     ws_send({"type": "progress", "completed": completed, "total": total_rows})
         
         # ── Step 4: Run with ThreadPoolExecutor ──
-        num_workers = min(20, total_unique)
-        ws_log(f"[SİSTEM] {num_workers} paralel HTTP işçisi başlatılıyor (Chrome yok, saf HTTP)...")
+        num_workers = min(5, total_unique)
+        ws_log(f"[SİSTEM] {num_workers} paralel HTTP işçisi başlatılıyor (Bellek dostu limit: 5)...")
         
         # Mark all rows as started
         for gcb_no, rows in gcb_groups.items():
             for item in rows:
                 ws_send({"type": "row_start", "row": item["row"], "gcb": gcb_no})
         
-        with ThreadPoolExecutor(max_workers=num_workers) as executor:
-            future_to_gcb = {
-                executor.submit(query_single_gcb, gcb): gcb
-                for gcb in unique_gcbs
-            }
-            
-            for future in as_completed(future_to_gcb):
-                if state.cancel_event.is_set():
-                    for f in future_to_gcb:
-                        f.cancel()
-                    ws_log("[SİSTEM] Sorgulama durduruldu.")
-                    break
+        try:
+            with ThreadPoolExecutor(max_workers=num_workers) as executor:
+                future_to_gcb = {
+                    executor.submit(query_single_gcb, gcb): gcb
+                    for gcb in unique_gcbs
+                }
                 
-                try:
-                    data = future.result()
-                    process_result(data["gcb"], data["result"])
-                except Exception as e:
-                    gcb = future_to_gcb[future]
-                    ws_log(f"[HATA] {gcb}: {str(e)}")
-                    process_result(gcb, {"success": False, "status": "Hata", "message": str(e), "date": None})
+                for future in as_completed(future_to_gcb):
+                    if state.cancel_event.is_set():
+                        for f in future_to_gcb:
+                            f.cancel()
+                        ws_log("[SİSTEM] Sorgulama durduruldu.")
+                        break
+                    
+                    try:
+                        data = future.result()
+                        process_result(data["gcb"], data["result"])
+                    except Exception as e:
+                        gcb = future_to_gcb[future]
+                        ws_log(f"[HATA] {gcb}: {str(e)}")
+                        process_result(gcb, {"success": False, "status": "Hata", "message": str(e), "date": None})
+        finally:
+            try:
+                wb.close()
+            except Exception:
+                pass
     
     try:
         # Run ALL blocking work in a separate thread so asyncio event loop stays free
