@@ -8,6 +8,9 @@ from datetime import datetime, date
 from typing import List, Dict, Any
 
 import openpyxl
+from openpyxl.worksheet.table import Table, TableStyleInfo
+from openpyxl.utils import get_column_letter
+from openpyxl.styles import Alignment
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, File, UploadFile
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 
@@ -74,6 +77,94 @@ def normalize_turkish(text: str) -> str:
         'ı': 'ı', 'ş': 'ş', 'ç': 'ç', 'ğ': 'ğ', 'ü': 'ü', 'ö': 'ö', 'i': 'i'
     }
     return "".join(mapping.get(c, c.lower()) for c in text)
+
+def apply_table_formatting_to_sheet(ws):
+    try:
+        ws.sheet_view.showGridLines = True
+    except Exception:
+        try:
+            ws.views.sheetView[0].showGridLines = True
+        except Exception:
+            pass
+
+    max_row = ws.max_row
+    max_col = ws.max_column
+    
+    if max_row < 1 or max_col < 1:
+        return
+
+    # Clear existing tables first to prevent overlaps/errors
+    if hasattr(ws, '_tables'):
+        ws._tables.clear()
+    ws.auto_filter.ref = None
+
+    # Define the Table range
+    ref = f"A1:{get_column_letter(max_col)}{max_row}"
+    
+    # Create the Table object
+    tab = Table(displayName="GumrukSorguTablosu", ref=ref)
+    
+    # Style: TableStyleMedium2 (Standard Excel blue theme with header and striped rows)
+    style = TableStyleInfo(
+        name="TableStyleMedium2",
+        showFirstColumn=False,
+        showLastColumn=False,
+        showRowStripes=True,
+        showColumnStripes=False
+    )
+    tab.tableStyleInfo = style
+    ws.add_table(tab)
+    
+    # Alignments
+    center_align = Alignment(horizontal="center", vertical="center")
+    left_align = Alignment(horizontal="left", vertical="center")
+    
+    # Loop columns to auto-fit and style cells
+    for col_idx in range(1, max_col + 1):
+        header_val = str(ws.cell(row=1, column=col_idx).value or "").strip()
+        hl = normalize_turkish(header_val)
+        
+        is_center_col = any(k in hl for k in [
+            "tarih", "date", "no", "numara", "gcb", "gb", "fatura", "tescil", "kod", "code"
+        ])
+        
+        max_len = len(header_val)
+        for row_idx in range(2, max_row + 1):
+            cell = ws.cell(row=row_idx, column=col_idx)
+            val_str = str(cell.value or "").strip()
+            
+            # Standardize date format to DD.MM.YYYY string or date object
+            if any(k in hl for k in ["tarih", "date", "intaç", "intac"]):
+                if isinstance(cell.value, (datetime, date)):
+                    cell.number_format = 'dd.mm.yyyy'
+                    val_str = cell.value.strftime("%d.%m.%Y")
+                elif val_str and re.match(r'^\d{4}-\d{2}-\d{2}$', val_str):
+                    try:
+                        d_obj = datetime.strptime(val_str, "%Y-%m-%d")
+                        cell.value = d_obj.date()
+                        cell.number_format = 'dd.mm.yyyy'
+                        val_str = d_obj.strftime("%d.%m.%Y")
+                    except Exception:
+                        pass
+                elif val_str and re.match(r'^\d{2}\.\d{2}\.\d{4}$', val_str):
+                    try:
+                        d_obj = datetime.strptime(val_str, "%d.%m.%Y")
+                        cell.value = d_obj.date()
+                        cell.number_format = 'dd.mm.yyyy'
+                    except Exception:
+                        pass
+                        
+            # Apply Alignment
+            if is_center_col:
+                cell.alignment = center_align
+            else:
+                cell.alignment = left_align
+                
+            if cell.value is not None:
+                max_len = max(max_len, len(val_str))
+                
+        col_letter = get_column_letter(col_idx)
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
 
 # Robust line parser for custom paste strings
 def parse_custom_line(line: str):
@@ -157,6 +248,10 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
             ws_write = wb_write.active
             new_col_idx = len(headers) + 1
             ws_write.cell(row=1, column=new_col_idx, value="Gümrük İntaç Tarihi")
+            
+            # Format table including new column
+            apply_table_formatting_to_sheet(ws_write)
+            
             wb_write.save(file_path)
             wb_write.close()
             
@@ -280,6 +375,9 @@ def generate_custom_excel(parsed_items: List[dict]):
         # Set intac empty
         ws.cell(row=idx, column=12, value=None)
         
+    # Format as professional table
+    apply_table_formatting_to_sheet(ws)
+    
     wb.save(EXCEL_CUSTOM_PATH)
     wb.close()
 
@@ -310,6 +408,17 @@ def get_data():
                 "firma_col_idx": 3,
                 "active_file": None
             })
+        
+        # Ensure active excel file is formatted properly
+        try:
+            wb_write = openpyxl.load_workbook(active_excel_path)
+            ws_write = wb_write.active
+            apply_table_formatting_to_sheet(ws_write)
+            wb_write.save(active_excel_path)
+            wb_write.close()
+        except Exception as ex:
+            print("Error formatting excel file on data load:", ex)
+            
         res = read_excel_data(active_excel_path)
         return JSONResponse(content={
             "success": True, 
@@ -333,6 +442,17 @@ async def upload_file(file: UploadFile = File(...)):
         with open(save_path, "wb") as f:
             f.write(content)
         active_excel_path = save_path
+        
+        # Ensure active excel file is formatted properly
+        try:
+            wb_write = openpyxl.load_workbook(active_excel_path)
+            ws_write = wb_write.active
+            apply_table_formatting_to_sheet(ws_write)
+            wb_write.save(active_excel_path)
+            wb_write.close()
+        except Exception as ex:
+            print("Error formatting excel file on upload:", ex)
+            
         res = read_excel_data(active_excel_path)
         return JSONResponse(content={
             "success": True, 
@@ -446,6 +566,8 @@ async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
                             
                             cell = ws.cell(row=row_idx, column=date_col_idx, value=date_obj)
                             cell.number_format = target_format
+                            
+                            apply_table_formatting_to_sheet(ws)
                             wb.save(excel_path)
                         ws_send({"type": "row_success", "row": row_idx, "gcb": gcb_no, "date": result["date"]})
                     except Exception as e:
@@ -490,6 +612,12 @@ async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
                         ws_log(f"[HATA] {gcb}: {str(e)}")
                         process_result(gcb, {"success": False, "status": "Hata", "message": str(e), "date": None})
         finally:
+            try:
+                with excel_lock:
+                    apply_table_formatting_to_sheet(ws)
+                    wb.save(excel_path)
+            except Exception as e:
+                print("Error in final save/format:", e)
             try:
                 wb.close()
             except Exception:
