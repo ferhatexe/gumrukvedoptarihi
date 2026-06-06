@@ -67,6 +67,9 @@ class ScraperState:
         self.is_running = False
         self.task = None
         self.cancel_event = threading.Event()
+        self.completed_count = 0
+        self.total_count = 0
+        self.log_history = []
 
 state = ScraperState()
 
@@ -167,37 +170,12 @@ def apply_table_formatting_to_sheet(ws):
         col_letter = get_column_letter(col_idx)
         ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
 
-# Robust line parser for custom paste strings
+# Robust line parser for custom paste strings (extracts only the GCB number)
 def parse_custom_line(line: str):
-    # Split by spaces, tabs, commas, or semicolons
-    clean_line = line.replace('\t', ' ').replace(';', ' ').replace(',', ' ')
-    parts = [p.strip() for p in clean_line.split() if p.strip()]
-    
-    gcb = None
-    fatura = None
-    
-    # 1. Regex match GCB No: e.g. 26341200EX00137190 (8 digits, 2 letters, 6 to 8 digits)
-    gcb_pattern = re.compile(r'^\d{8}[A-Za-z]{2}\d{6,8}$')
-    for p in parts:
-        if gcb_pattern.match(p):
-            gcb = p
-            break
-    if gcb:
-        parts.remove(gcb)
-        
-    # 2. Match Fatura No: alphanumeric string containing digits, starts with BT/BTC or similar
-    fatura_pattern = re.compile(r'^(BT[C]?\d+|[A-Za-z0-9\-]+)$')
-    for p in parts:
-        if fatura_pattern.match(p) and any(c.isdigit() for c in p) and len(p) >= 4:
-            fatura = p
-            break
-    if fatura:
-        parts.remove(fatura)
-        
-    # 3. Remaining parts are Company Name
-    firma = " ".join(parts) if parts else ""
-    
-    return gcb, fatura, firma
+    # Regex match GCB No: e.g. 26341200EX00137190 (8 digits, 2 letters, 6 to 8 digits)
+    match = re.search(r'\d{8}[A-Za-z]{2}\d{6,8}', line)
+    gcb = match.group(0).upper() if match else None
+    return gcb, "", ""
 
 def read_excel_data(file_path: str) -> Dict[str, Any]:
     global gcb_col_idx, date_col_idx, fatura_col_idx, firma_col_idx, headers_list
@@ -479,19 +457,25 @@ def download_file():
 async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
     state.is_running = True
     state.cancel_event.clear()
-    loop = asyncio.get_running_loop()
+    state.completed_count = 0
+    state.total_count = len(rows_to_query)
+    state.log_history = []
     
+    loop = asyncio.get_running_loop()
     excel_path = active_excel_path
     total_rows = len(rows_to_query)
     
     def ws_send(msg_dict):
-        """Thread-safe WebSocket message sender (fire-and-forget, no blocking)."""
+        """Thread-safe WebSocket message broadcaster (fire-and-forget, no blocking)."""
         try:
-            asyncio.run_coroutine_threadsafe(websocket.send_json(msg_dict), loop)
+            asyncio.run_coroutine_threadsafe(manager.broadcast(msg_dict), loop)
         except Exception:
             pass
     
     def ws_log(msg):
+        state.log_history.append(msg)
+        if len(state.log_history) > 300:
+            state.log_history.pop(0)
         ws_send({"type": "log", "message": msg})
     
     def _run_blocking():
@@ -554,6 +538,7 @@ async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
                 with completed_lock:
                     completed += 1
                     current_completed = completed
+                    state.completed_count = current_completed
                 
                 if result.get("success") and result.get("date"):
                     try:
@@ -657,6 +642,23 @@ async def run_scraper_task(websocket: WebSocket, rows_to_query: List[dict]):
 async def websocket_endpoint(websocket: WebSocket):
     global active_excel_path
     await manager.connect(websocket)
+    
+    # Send initial state to the newly connected client
+    res = read_excel_data(active_excel_path)
+    await websocket.send_json({
+        "type": "init_state",
+        "is_running": state.is_running,
+        "completed": state.completed_count,
+        "total": state.total_count,
+        "active_file": os.path.basename(active_excel_path) if active_excel_path else None,
+        "log_history": state.log_history,
+        "data": res["rows"],
+        "headers": res["headers"],
+        "gcb_col_idx": gcb_col_idx,
+        "date_col_idx": date_col_idx,
+        "fatura_col_idx": fatura_col_idx,
+        "firma_col_idx": firma_col_idx,
+    })
     try:
         while True:
             data = await websocket.receive_text()
@@ -782,9 +784,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-        if state.is_running:
-            state.cancel_event.set()
-            state.is_running = False
     except Exception as e:
         print("WebSocket Error:", e)
         manager.disconnect(websocket)

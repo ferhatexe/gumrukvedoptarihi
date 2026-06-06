@@ -162,6 +162,59 @@ function handleWebSocketMessage(msg) {
             // Heartbeat response, ignore
             break;
             
+        case "init_state":
+            // Load excel metadata and rows
+            allRows = msg.data || [];
+            activeHeaders = msg.headers || [];
+            activeGcbColIdx = msg.gcb_col_idx || 9;
+            activeDateColIdx = msg.date_col_idx || 12;
+            activeFaturaColIdx = msg.fatura_col_idx || 1;
+            activeFirmaColIdx = msg.firma_col_idx || 3;
+            
+            if (msg.active_file) {
+                activeFileBadge.innerText = `Aktif Dosya: ${msg.active_file}`;
+                activeFileBadge.className = "active-file-text loaded";
+                btnDownload.classList.remove("disabled-btn");
+            } else {
+                activeFileBadge.innerText = "Aktif Dosya: Yok (Yeni Görev Bekleniyor)";
+                activeFileBadge.className = "active-file-text empty";
+                btnDownload.classList.add("disabled-btn");
+            }
+            renderTable(allRows);
+            updateStats();
+            
+            // Re-populate terminal with log history
+            if (msg.log_history && msg.log_history.length > 0) {
+                terminal.innerHTML = "";
+                msg.log_history.forEach(logText => {
+                    let cls = "";
+                    if (logText.includes("HATA") || logText.includes("başarısız")) {
+                        cls = "error";
+                    } else if (logText.includes("Bulundu") || logText.includes("başarıyla") || logText.includes("çözüldü") || logText.includes("Ayrıştırma başarılı")) {
+                        cls = "success";
+                    } else if (logText.includes("henüz kapanmamış") || logText.includes("uyarı")) {
+                        cls = "warning";
+                    }
+                    addTerminalLine(logText, cls);
+                });
+            }
+            
+            // Re-sync automation button states and progress bar
+            if (msg.is_running) {
+                btnStart.setAttribute("disabled", "true");
+                btnParseQuery.setAttribute("disabled", "true");
+                btnStop.removeAttribute("disabled");
+                
+                const percent = Math.round((msg.completed / msg.total) * 100) || 0;
+                progressBarFill.style.width = percent + "%";
+                progressPercent.innerText = `${percent}% (${msg.completed}/${msg.total})`;
+            } else {
+                btnStart.removeAttribute("disabled");
+                btnParseQuery.removeAttribute("disabled");
+                btnStop.setAttribute("disabled", "true");
+            }
+            break;
+            
         case "log":
             let cls = "";
             const text = msg.message;
