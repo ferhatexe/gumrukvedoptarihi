@@ -16,7 +16,13 @@ from scraper import HttpCustomsScraper
 app = FastAPI(title="Gümrük Beyanname Sorgulama Otomasyonu")
 
 # Excel Paths
-BASE_DIR = r"c:\WORK\00_INBOX\MAYIS BEYANLAR\MAYIS BEYANLAR"
+LOCAL_BASE_DIR = r"c:\WORK\00_INBOX\MAYIS BEYANLAR\MAYIS BEYANLAR"
+if os.path.exists(LOCAL_BASE_DIR):
+    BASE_DIR = LOCAL_BASE_DIR
+else:
+    BASE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+    os.makedirs(BASE_DIR, exist_ok=True)
+
 EXCEL_PATH = os.path.join(BASE_DIR, "EXPORT.XLSX")
 EXCEL_CUSTOM_PATH = os.path.join(BASE_DIR, "EXPORT_CUSTOM.XLSX")
 
