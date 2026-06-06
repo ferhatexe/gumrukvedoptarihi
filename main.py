@@ -643,6 +643,7 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
         if state.is_running:
+            state.cancel_event.set()
             state.is_running = False
     except Exception as e:
         print("WebSocket Error:", e)
