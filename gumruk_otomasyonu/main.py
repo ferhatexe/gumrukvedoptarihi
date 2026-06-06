@@ -203,10 +203,10 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
     global gcb_col_idx, date_col_idx, fatura_col_idx, firma_col_idx, headers_list
     
     # Reset defaults in case of empty or missing spreadsheet
-    gcb_col_idx = 9
-    date_col_idx = 12
-    fatura_col_idx = 1
-    firma_col_idx = 3
+    gcb_col_idx = -1
+    date_col_idx = -1
+    fatura_col_idx = -1
+    firma_col_idx = -1
     headers_list = []
     
     if not file_path or not os.path.exists(file_path):
@@ -276,10 +276,10 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
             else:
                 row_values.append(str(val).strip())
                 
-        fatura = row_values[fatura_col_idx - 1] if 0 < fatura_col_idx <= len(row_values) else ""
-        firma = row_values[firma_col_idx - 1] if 0 < firma_col_idx <= len(row_values) else ""
-        gcb = row_values[gcb_col_idx - 1] if 0 < gcb_col_idx <= len(row_values) else ""
-        intac_str = row_values[date_col_idx - 1] if 0 < date_col_idx <= len(row_values) else ""
+        fatura = row_values[fatura_col_idx - 1] if fatura_found and 0 < fatura_col_idx <= len(row_values) else ""
+        firma = row_values[firma_col_idx - 1] if firma_found and 0 < firma_col_idx <= len(row_values) else ""
+        gcb = row_values[gcb_col_idx - 1] if gcb_found and 0 < gcb_col_idx <= len(row_values) else ""
+        intac_str = row_values[date_col_idx - 1] if date_found and 0 < date_col_idx <= len(row_values) else ""
         
         if fatura.lower() == "none": fatura = ""
         if firma.lower() == "none": firma = ""
