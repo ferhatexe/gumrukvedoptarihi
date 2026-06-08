@@ -1252,6 +1252,7 @@ function animateCounter(element, targetValue) {
         const eased = 1 - Math.pow(1 - progress, 3); // easeOutCubic
         const current = Math.round(start + (targetValue - start) * eased);
         element.textContent = Math.max(0, current);
+        element._currentValue = current; // Keep _currentValue in sync with textContent!
         if (progress < 1) {
             element._animId = requestAnimationFrame(update);
         } else {
