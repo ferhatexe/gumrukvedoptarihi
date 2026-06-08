@@ -1,12 +1,187 @@
+class SoundEngine {
+    constructor() {
+        this.ctx = null;
+        this.initialized = false;
+    }
+    
+    init() {
+        if (this.initialized) return;
+        try {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            this.initialized = true;
+            console.log("[SES] SoundEngine initialized successfully.");
+        } catch (e) {
+            console.warn("[SES] Web Audio API not supported or blocked:", e);
+        }
+    }
+    
+    playSuccess() {
+        this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        // Ascending major arpeggio (C5 -> E5 -> G5 -> C6)
+        const notes = [523.25, 659.25, 783.99, 1046.50];
+        notes.forEach((freq, index) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(freq, now + index * 0.08);
+            
+            gain.gain.setValueAtTime(0, now + index * 0.08);
+            gain.gain.linearRampToValueAtTime(0.45, now + index * 0.08 + 0.02); // Louder volume (0.45)
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.08 + 0.35);
+            
+            osc.start(now + index * 0.08);
+            osc.stop(now + index * 0.08 + 0.45);
+        });
+    }
+    
+    playNotClosed() {
+        this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        // Descending minor interval (A4 -> F4)
+        const notes = [440.00, 349.23];
+        notes.forEach((freq, index) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            
+            osc.type = "triangle";
+            osc.frequency.setValueAtTime(freq, now + index * 0.12);
+            
+            gain.gain.setValueAtTime(0, now + index * 0.12);
+            gain.gain.linearRampToValueAtTime(0.4, now + index * 0.12 + 0.02); // Louder volume (0.4)
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.12 + 0.4);
+            
+            osc.start(now + index * 0.12);
+            osc.stop(now + index * 0.12 + 0.45);
+        });
+    }
+    
+    playError() {
+        this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        // Deep warning double-buzz (E3 -> C3)
+        const notes = [164.81, 130.81];
+        notes.forEach((freq, index) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            
+            osc.type = "sawtooth";
+            osc.frequency.setValueAtTime(freq, now + index * 0.18);
+            
+            gain.gain.setValueAtTime(0, now + index * 0.18);
+            gain.gain.linearRampToValueAtTime(0.4, now + index * 0.18 + 0.04); // Louder volume (0.4)
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.18 + 0.3);
+            
+            osc.start(now + index * 0.18);
+            osc.stop(now + index * 0.18 + 0.35);
+        });
+    }
+    
+    playUploadSuccess() {
+        this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        // High bright "ding" (C6)
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(1046.50, now);
+        
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.45, now + 0.01); // Louder volume (0.45)
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+        
+        osc.start(now);
+        osc.stop(now + 0.35);
+    }
+
+    playReset() {
+        this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        // Descending sweeping notes (C4 -> G3 -> C3)
+        const notes = [261.63, 196.00, 130.81];
+        notes.forEach((freq, index) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(freq, now + index * 0.1);
+            
+            gain.gain.setValueAtTime(0, now + index * 0.1);
+            gain.gain.linearRampToValueAtTime(0.45, now + index * 0.1 + 0.02); // Premium sweep volume (0.45)
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.1 + 0.4);
+            
+            osc.start(now + index * 0.1);
+            osc.stop(now + index * 0.1 + 0.5);
+        });
+    }
+}
+
+const soundEngine = new SoundEngine();
+
 let socket = null;
 let heartbeatInterval = null;
 let allRows = [];
 let queryStatus = {}; // Keep track of current session query status per row index
+let queryStartTime = null;
+let queryTimerInterval = null;
+let totalCaptchaAttempts = 0;
+let lastUpdatedRow = null;
+let lastUpdatedTime = 0;
 let activeHeaders = []; // Dynamic headers from active Excel
 let activeGcbColIdx = 9; // Index of GCB column (1-based)
 let activeDateColIdx = 12; // Index of Date column (1-based)
 let activeFaturaColIdx = 1; // Index of Fatura column (1-based)
-let activeFirmaColIdx = 3; // Index of Firma column (1-based)
+const STATUS_PRIORITY = {
+    "İntaç Tarihi Var": 10,
+    "Kapanmamış": 8,
+    "Soğumada": 6,
+    "Sorgulanıyor...": 5,
+    "Başarısız": 4,
+    "Hatalı": 4,
+    "Bekliyor": 2
+};
+
+function getGcbConsolidatedStatus(rows) {
+    let maxPriority = -1;
+    let bestStatus = "Bekliyor";
+    
+    rows.forEach(item => {
+        let status;
+        const qs = queryStatus[item.row];
+        if (item.intac && item.status === "İntaç Tarihi Var") {
+            status = "İntaç Tarihi Var";
+        } else if (qs) {
+            status = qs.status;
+        } else {
+            status = item.status || "Bekliyor";
+        }
+        
+        const priority = STATUS_PRIORITY[status] || 1;
+        if (priority > maxPriority) {
+            maxPriority = priority;
+            bestStatus = status;
+        }
+    });
+    
+    return bestStatus;
+}
 
 // Session Management: Generate or retrieve session ID
 function getOrCreateSessionId() {
@@ -32,6 +207,7 @@ const activeFileBadge = document.getElementById("active-file-badge");
 const statTotal = document.getElementById("stat-total");
 const statCompleted = document.getElementById("stat-completed");
 const statPending = document.getElementById("stat-pending");
+const statNotClosed = document.getElementById("stat-not-closed");
 const statErrors = document.getElementById("stat-errors");
 const btnStart = document.getElementById("btn-start");
 const btnStop = document.getElementById("btn-stop");
@@ -81,6 +257,27 @@ document.addEventListener("DOMContentLoaded", () => {
     searchInput.addEventListener("input", filterTable);
     document.getElementById("filter-status").addEventListener("change", filterTable);
     document.getElementById("filter-type").addEventListener("change", filterTable);
+    
+    // Input mode switching (Excel Upload / Serbest Metin)
+    const btnModeExcel = document.getElementById("btn-mode-excel");
+    const btnModeText = document.getElementById("btn-mode-text");
+    const sectionExcel = document.getElementById("section-mode-excel");
+    const sectionText = document.getElementById("section-mode-text");
+    
+    if (btnModeExcel && btnModeText && sectionExcel && sectionText) {
+        btnModeExcel.addEventListener("click", () => {
+            btnModeExcel.classList.add("active");
+            btnModeText.classList.remove("active");
+            sectionExcel.classList.add("active");
+            sectionText.classList.remove("active");
+        });
+        btnModeText.addEventListener("click", () => {
+            btnModeText.classList.add("active");
+            btnModeExcel.classList.remove("active");
+            sectionText.classList.add("active");
+            sectionExcel.classList.remove("active");
+        });
+    }
     
     // Start the cooldown ticker
     setInterval(updateCooldowns, 1000);
@@ -170,7 +367,7 @@ function connectWebSocket() {
     socket.onerror = (err) => {
         addTerminalLine("[HATA] WebSocket hatası oluştu.", "error");
     };
-    
+
     socket.onmessage = (event) => {
         const payload = JSON.parse(event.data);
         handleWebSocketMessage(payload);
@@ -202,7 +399,7 @@ function handleWebSocketMessage(msg) {
                 activeFileBadge.className = "active-file-text empty";
                 btnDownload.classList.add("disabled-btn");
             }
-            renderTable(allRows);
+            filterTable();
             updateStats();
             
             // Re-populate terminal with log history
@@ -230,6 +427,7 @@ function handleWebSocketMessage(msg) {
                 const percent = Math.round((msg.completed / msg.total) * 100) || 0;
                 progressBarFill.style.width = percent + "%";
                 progressPercent.innerText = `${percent}% (${msg.completed}/${msg.total})`;
+                startQueryTimer();
             } else {
                 btnStart.removeAttribute("disabled");
                 btnParseQuery.removeAttribute("disabled");
@@ -238,16 +436,16 @@ function handleWebSocketMessage(msg) {
             break;
             
         case "log":
-            let cls = "";
-            const text = msg.message;
-            if (text.includes("HATA") || text.includes("başarısız")) {
-                cls = "error";
-            } else if (text.includes("Bulundu") || text.includes("başarıyla") || text.includes("çözüldü") || text.includes("Ayrıştırma başarılı")) {
-                cls = "success";
-            } else if (text.includes("henüz kapanmamış") || text.includes("uyarı")) {
-                cls = "warning";
+            let logCls = "";
+            const logText = msg.message;
+            if (logText.includes("HATA") || logText.includes("başarısız")) {
+                logCls = "error";
+            } else if (logText.includes("Bulundu") || logText.includes("başarıyla") || logText.includes("çözüldü") || logText.includes("Ayrıştırma başarılı")) {
+                logCls = "success";
+            } else if (logText.includes("henüz kapanmamış") || logText.includes("uyarı")) {
+                logCls = "warning";
             }
-            addTerminalLine(text, cls);
+            addTerminalLine(logText, logCls);
             break;
             
         case "custom_list_loaded":
@@ -269,57 +467,104 @@ function handleWebSocketMessage(msg) {
                 activeFileBadge.className = "active-file-text empty";
                 btnDownload.classList.add("disabled-btn");
             }
-            renderTable(allRows);
+            filterTable();
             updateStats();
             break;
             
         case "row_start":
-            updateRowUIStatus(msg.row, "Sorgulanıyor...", "badge-running", null, msg.gcb);
+            queryStatus[msg.row] = { intac: "", status: "Sorgulanıyor..." };
             addTerminalLine(`[SORGULAMA] Satır ${msg.row} için sorgu başlatıldı. GCB: ${msg.gcb}`, "system");
+            startQueryTimer();
+            updateRowUIStatus(msg.row, "Sorgulanıyor...", "badge-running", null, msg.gcb);
+            updateStats();
+            
+            if (searchInput.value.trim() !== "" || document.getElementById("filter-status").value !== "all" || document.getElementById("filter-type").value !== "all") {
+                filterTable();
+            }
             break;
             
         case "row_success":
             queryStatus[msg.row] = { intac: msg.date, status: "İntaç Tarihi Var" };
-            updateRowUIStatus(msg.row, "İntaç Tarihi Var", "badge-success", msg.date, msg.gcb);
             addTerminalLine(`[BAŞARILI] Satır ${msg.row} güncellendi: İntaç Tarihi = ${msg.date}`, "success");
+            soundEngine.playSuccess();
             
-            const tr = document.getElementById(`row-${msg.row}`);
-            if (tr) {
-                tr.classList.add("row-updating");
-                setTimeout(() => tr.classList.remove("row-updating"), 2000);
-            }
-            const cacheRowIdx = allRows.findIndex(r => r.row === msg.row);
+            lastUpdatedRow = msg.row;
+            lastUpdatedTime = Date.now();
+            
+            const cacheRowIdx = allRows.findIndex(r => Number(r.row) === Number(msg.row));
             if (cacheRowIdx !== -1) {
                 allRows[cacheRowIdx].intac = msg.date;
                 allRows[cacheRowIdx].status = "İntaç Tarihi Var";
             }
+            updateRowUIStatus(msg.row, "İntaç Tarihi Var", "badge-success", msg.date, msg.gcb);
             updateStats();
+            
+            if (searchInput.value.trim() !== "" || document.getElementById("filter-status").value !== "all" || document.getElementById("filter-type").value !== "all") {
+                filterTable();
+            }
             break;
             
         case "row_not_closed":
             queryStatus[msg.row] = { intac: "", status: "Kapanmamış" };
             startCooldown(msg.gcb);
-            updateRowUIStatus(msg.row, "Kapanmamış", "badge-fail", null, msg.gcb);
             addTerminalLine(`[UYARI] Satır ${msg.row} beyannamesi henüz kapanmamış. 5 dakika sorgu soğuma süresi başlatıldı.`, "warning");
+            soundEngine.playNotClosed();
             
-            const cacheRowIdxWarning = allRows.findIndex(r => r.row === msg.row);
+            lastUpdatedRow = msg.row;
+            lastUpdatedTime = Date.now();
+            
+            const cacheRowIdxWarning = allRows.findIndex(r => Number(r.row) === Number(msg.row));
             if (cacheRowIdxWarning !== -1) {
                 allRows[cacheRowIdxWarning].status = "Kapanmamış";
             }
+            updateRowUIStatus(msg.row, "Kapanmamış", "badge-warning", null, msg.gcb);
             updateStats();
+            
+            if (searchInput.value.trim() !== "" || document.getElementById("filter-status").value !== "all" || document.getElementById("filter-type").value !== "all") {
+                filterTable();
+            }
+            break;
+            
+        case "row_cooldown":
+            queryStatus[msg.row] = { intac: "", status: "Soğumada" };
+            startCooldown(msg.gcb);
+            addTerminalLine(`[UYARI] Satır ${msg.row} sorgulama limitine takıldı. Cooldown süresi bitince otomatik tekrar denenecek.`, "warning");
+            soundEngine.playNotClosed();
+            
+            lastUpdatedRow = msg.row;
+            lastUpdatedTime = Date.now();
+            
+            const cacheRowIdxCooldown = allRows.findIndex(r => Number(r.row) === Number(msg.row));
+            if (cacheRowIdxCooldown !== -1) {
+                allRows[cacheRowIdxCooldown].status = "Soğumada";
+            }
+            updateRowUIStatus(msg.row, "Soğumada", "badge-cooldown", null, msg.gcb);
+            updateStats();
+            
+            if (searchInput.value.trim() !== "" || document.getElementById("filter-status").value !== "all" || document.getElementById("filter-type").value !== "all") {
+                filterTable();
+            }
             break;
             
         case "row_fail":
             queryStatus[msg.row] = { intac: "", status: "Başarısız" };
             startCooldown(msg.gcb);
-            updateRowUIStatus(msg.row, "Başarısız", "badge-fail", null, msg.gcb);
             addTerminalLine(`[BAŞARISIZ] Satır ${msg.row} sorgulama başarısız oldu: ${msg.message}. 5 dakika sorgu soğuma süresi başlatıldı.`, "error");
+            soundEngine.playError();
             
-            const cacheRowIdxFail = allRows.findIndex(r => r.row === msg.row);
+            lastUpdatedRow = msg.row;
+            lastUpdatedTime = Date.now();
+            
+            const cacheRowIdxFail = allRows.findIndex(r => Number(r.row) === Number(msg.row));
             if (cacheRowIdxFail !== -1) {
                 allRows[cacheRowIdxFail].status = "Başarısız";
             }
+            updateRowUIStatus(msg.row, "Başarısız", "badge-fail", null, msg.gcb);
             updateStats();
+            
+            if (searchInput.value.trim() !== "" || document.getElementById("filter-status").value !== "all" || document.getElementById("filter-type").value !== "all") {
+                filterTable();
+            }
             break;
             
         case "progress":
@@ -333,6 +578,7 @@ function handleWebSocketMessage(msg) {
             btnParseQuery.removeAttribute("disabled");
             btnStop.setAttribute("disabled", "true");
             addTerminalLine("[SİSTEM] Sorgulama işlemi tamamlandı. Güncel Excel dosyasını indirebilirsiniz.", "success");
+            stopQueryTimer(true); // Stop timer and trigger modal report popup
             loadExcelData();
             break;
             
@@ -341,6 +587,7 @@ function handleWebSocketMessage(msg) {
             btnParseQuery.removeAttribute("disabled");
             btnStop.setAttribute("disabled", "true");
             addTerminalLine("[SİSTEM] Sorgulama durduruldu. Kısmi sonuçlar Excel'e kaydedildi.", "warning");
+            stopQueryTimer(true); // Stop timer and trigger modal report popup
             loadExcelData();
             break;
             
@@ -349,15 +596,45 @@ function handleWebSocketMessage(msg) {
             btnStart.removeAttribute("disabled");
             btnParseQuery.removeAttribute("disabled");
             btnStop.setAttribute("disabled", "true");
+            stopQueryTimer(false); // Stop timer silently
             break;
     }
 }
 
-// Add line to terminal panel
+// Add line to terminal panel with premium SVG icon styling
 function addTerminalLine(text, className = "") {
+    const now = new Date();
+    const timeStr = now.toTimeString().split(" ")[0]; // Get HH:MM:SS format
+    
+    // Clean up duplicated prefixes if any
+    let cleanText = text;
+    let type = className;
+    
+    if (cleanText.startsWith("[SİSTEM]")) { cleanText = cleanText.replace("[SİSTEM]", "").trim(); type = "system"; }
+    else if (cleanText.startsWith("[BAŞARILI]")) { cleanText = cleanText.replace("[BAŞARILI]", "").trim(); type = "success"; }
+    else if (cleanText.startsWith("[SORGULAMA]")) { cleanText = cleanText.replace("[SORGULAMA]", "").trim(); type = "system"; }
+    else if (cleanText.startsWith("[UYARI]")) { cleanText = cleanText.replace("[UYARI]", "").trim(); type = "warning"; }
+    else if (cleanText.startsWith("[BAŞARISIZ]")) { cleanText = cleanText.replace("[BAŞARISIZ]", "").trim(); type = "error"; }
+    else if (cleanText.startsWith("[HATA]")) { cleanText = cleanText.replace("[HATA]", "").trim(); type = "error"; }
+    
+    if (!type) type = "info";
+    
+    let iconSvg = "";
+    if (type === "success") {
+        iconSvg = `<svg class="log-icon log-icon-success" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:15px; height:15px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
+    } else if (type === "error") {
+        iconSvg = `<svg class="log-icon log-icon-error" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:15px; height:15px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>`;
+    } else if (type === "warning") {
+        iconSvg = `<svg class="log-icon log-icon-warning" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:15px; height:15px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>`;
+    } else if (type === "system") {
+        iconSvg = `<svg class="log-icon log-icon-system" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:15px; height:15px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25A2.25 2.25 0 015.25 3h13.5A2.25 2.25 0 0121 5.25zM16.5 7.5h.008v.008H16.5V7.5z" /></svg>`;
+    } else {
+        iconSvg = `<svg class="log-icon log-icon-info" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:15px; height:15px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.25 11.25l.041-.02a.75.75 0 111.063.852l-.708.283a.75.75 0 00-.475.694V15.75m0-6h.008v.008H12V9.75zM21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
+    }
+    
     const line = document.createElement("div");
-    line.className = "terminal-line " + className;
-    line.innerText = text;
+    line.className = "terminal-line " + type;
+    line.innerHTML = `<span class="log-time">[${timeStr}]</span> <span class="log-icon-wrapper">${iconSvg}</span> <span class="log-text">${cleanText}</span>`;
     terminal.appendChild(line);
     terminal.scrollTop = terminal.scrollHeight;
 }
@@ -365,19 +642,22 @@ function addTerminalLine(text, className = "") {
 // Trigger all automated queries
 function startAutomation() {
     if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ action: "start_all" }));
+        socket.send(JSON.stringify({ 
+            action: "start_all"
+        }));
         btnStart.setAttribute("disabled", "true");
         btnParseQuery.setAttribute("disabled", "true");
         btnStop.removeAttribute("disabled");
         progressBarFill.style.width = "0%";
         progressPercent.innerText = "0%";
         switchTab("tab-terminal"); // Switch to system logs tab automatically
+        startQueryTimer();
     }
 }
 
 // Trigger custom GCB text list queries
 function startCustomListAutomation() {
-    const text = rawInput.value.strip();
+    const text = rawInput.value.trim();
     if (!text) {
         addTerminalLine("UYARI: Sorgulanacak metin listesi girilmemiş.", "warning");
         return;
@@ -394,6 +674,7 @@ function startCustomListAutomation() {
         progressBarFill.style.width = "0%";
         progressPercent.innerText = "0%";
         switchTab("tab-terminal"); // Switch to system logs tab automatically
+        startQueryTimer();
     }
 }
 
@@ -442,12 +723,28 @@ function renderTable(rows) {
     
     let html = "";
     rows.forEach(item => {
-        const state = queryStatus[item.row] || { intac: item.intac, status: item.status };
+        // Determine display state: prioritize actual intac data, then queryStatus, then item.status
+        let state;
+        if (item.intac && item.status === "İntaç Tarihi Var") {
+            state = { intac: item.intac, status: "İntaç Tarihi Var" };
+        } else if (queryStatus[item.row]) {
+            state = queryStatus[item.row];
+            // If queryStatus says intac found, also use it
+            if (state.intac) {
+                state = { intac: state.intac, status: "İntaç Tarihi Var" };
+            }
+        } else {
+            state = { intac: item.intac, status: item.status };
+        }
         
         let badgeClass = "badge-pending";
         if (state.status === "İntaç Tarihi Var") {
             badgeClass = "badge-success";
-        } else if (state.status === "Kapanmamış" || state.status === "Başarısız") {
+        } else if (state.status === "Kapanmamış") {
+            badgeClass = "badge-warning";
+        } else if (state.status === "Soğumada") {
+            badgeClass = "badge-cooldown";
+        } else if (state.status === "Başarısız" || state.status === "Hatalı") {
             badgeClass = "badge-fail";
         } else if (state.status === "Sorgulanıyor...") {
             badgeClass = "badge-running";
@@ -485,10 +782,15 @@ function renderTable(rows) {
                 const isFaturaCol = (colIdx + 1) === activeFaturaColIdx;
                 const isFirmaCol = (colIdx + 1) === activeFirmaColIdx;
                 
+                const headerName = (activeHeaders && activeHeaders[colIdx]) ? activeHeaders[colIdx].toLowerCase() : "";
+                const isAnyDateCol = headerName.includes("tarih") || headerName.includes("date");
+                
                 if (isGcbCol) {
                     rowHtml += `<td class="font-mono"><strong>${val || "-"}</strong>${etgbBadge}</td>`;
                 } else if (isDateCol) {
                     rowHtml += `<td id="date-${item.row}" class="font-mono">${formatDate(state.intac || val) || "-"}</td>`;
+                } else if (isAnyDateCol) {
+                    rowHtml += `<td class="font-mono">${formatDate(val) || "-"}</td>`;
                 } else if (isFaturaCol) {
                     rowHtml += `<td class="font-mono">${val || "-"}</td>`;
                 } else if (isFirmaCol) {
@@ -560,6 +862,12 @@ function updateRowUIStatus(row, statusText, badgeClass, date = null, gcb = null)
                 actionCell.innerHTML = `<button class="btn btn-inline btn-primary" data-action-btn="${row}" onclick="querySingleRow(${row}, '${gcb}')">Sorgula</button>`;
             }
         }
+    }
+    const tr = document.getElementById(`row-${row}`);
+    if (tr) {
+        tr.classList.remove("row-updating");
+        void tr.offsetWidth; // force reflow
+        tr.classList.add("row-updating");
     }
 }
 
@@ -650,15 +958,28 @@ async function uploadExcelFile(file) {
             
             setDropZoneStatus("Yeni Dosyayı Sürükleyin veya Dosya Seçin", false);
             addTerminalLine(`[BAŞARILI] Excel dosyası '${activeFile}' yüklendi ve tablo güncellendi.`, "success");
+            
+            // Premium sound and visual effects
+            soundEngine.playUploadSuccess();
+            dropZone.classList.add("upload-success");
+            setTimeout(() => dropZone.classList.remove("upload-success"), 1500);
         } else {
             setDropZoneStatus("YÜKLEME BAŞARISIZ! Tekrar Deneyin.", true);
             alert("Excel Yükleme Hatası:\n" + json.message);
             addTerminalLine("HATA: Excel yükleme başarısız: " + json.message, "error");
+            
+            soundEngine.playError();
+            dropZone.classList.add("upload-fail");
+            setTimeout(() => dropZone.classList.remove("upload-fail"), 1500);
         }
     } catch (e) {
         setDropZoneStatus("SUNUCU BAĞLANTI HATASI! Tekrar Deneyin.", true);
         alert("Sunucu Bağlantı Hatası:\n" + e.message);
         addTerminalLine("HATA: Sunucuya bağlanırken hata oluştu: " + e.message, "error");
+        
+        soundEngine.playError();
+        dropZone.classList.add("upload-fail");
+        setTimeout(() => dropZone.classList.remove("upload-fail"), 1500);
     }
 }
 
@@ -669,26 +990,82 @@ function truncate(str, n) {
 
 // Recalculate stats cards
 function updateStats() {
-    statTotal.innerText = allRows.length;
-    
-    let completed = 0;
-    let pending = 0;
-    let errors = 0;
-    
+    // Group rows by GCB
+    const gcbGroups = {};
     allRows.forEach(item => {
-        const state = queryStatus[item.row] || { intac: item.intac, status: item.status };
-        if (state.status === "İntaç Tarihi Var") {
-            completed++;
-        } else if (state.status === "Bekliyor" || state.status === "Sorgulanıyor...") {
-            pending++;
-        } else if (state.status === "Kapanmamış" || state.status === "Başarısız" || state.status === "Sistem Uyarısı") {
-            errors++;
+        const gcb = item.gcb ? item.gcb.trim() : "";
+        if (!gcb) return;
+        if (!gcbGroups[gcb]) {
+            gcbGroups[gcb] = [];
         }
+        gcbGroups[gcb].push(item);
     });
     
-    statCompleted.innerText = completed;
-    statPending.innerText = pending;
-    statErrors.innerText = errors;
+    // Determine consolidated status for each unique GCB
+    let uniqueTotal = 0;
+    let uniqueCompleted = 0;
+    let uniquePending = 0;
+    let uniqueNotClosed = 0;
+    let uniqueErrors = 0;
+    
+    let rowTotal = allRows.length;
+    let rowCompleted = 0;
+    let rowPending = 0;
+    let rowNotClosed = 0;
+    let rowErrors = 0;
+    
+    for (const gcb in gcbGroups) {
+        uniqueTotal++;
+        const rows = gcbGroups[gcb];
+        const status = getGcbConsolidatedStatus(rows);
+        
+        if (status === "İntaç Tarihi Var") {
+            uniqueCompleted++;
+        } else if (status === "Kapanmamış") {
+            uniqueNotClosed++;
+        } else if (status === "Başarısız" || status === "Hatalı") {
+            uniqueErrors++;
+        } else {
+            uniquePending++;
+        }
+        
+        // Count rows for each category
+        rows.forEach(item => {
+            let rowStatus;
+            const qs = queryStatus[item.row];
+            if (item.intac && item.status === "İntaç Tarihi Var") {
+                rowStatus = "İntaç Tarihi Var";
+            } else if (qs) {
+                rowStatus = qs.status;
+            } else {
+                rowStatus = item.status || "Bekliyor";
+            }
+            
+            if (rowStatus === "İntaç Tarihi Var") {
+                rowCompleted++;
+            } else if (rowStatus === "Kapanmamış") {
+                rowNotClosed++;
+            } else if (rowStatus === "Başarısız" || rowStatus === "Hatalı") {
+                rowErrors++;
+            } else {
+                rowPending++;
+            }
+        });
+    }
+    
+    // Update the main counter and the subtitle text
+    if (statTotal) animateCounter(statTotal, uniqueTotal);
+    if (statCompleted) animateCounter(statCompleted, uniqueCompleted);
+    if (statPending) animateCounter(statPending, uniquePending);
+    if (statNotClosed) animateCounter(statNotClosed, uniqueNotClosed);
+    if (statErrors) animateCounter(statErrors, uniqueErrors);
+    
+    // Update subtitle elements
+    updateSubtitle("stat-total-rows", rowTotal);
+    updateSubtitle("stat-completed-rows", rowCompleted);
+    updateSubtitle("stat-pending-rows", rowPending);
+    updateSubtitle("stat-not-closed-rows", rowNotClosed);
+    updateSubtitle("stat-errors-rows", rowErrors);
     
     if (allRows.length === 0) {
         btnStart.setAttribute("disabled", "true");
@@ -697,9 +1074,208 @@ function updateStats() {
     }
 }
 
+function updateSubtitle(elementId, rowCount) {
+    const el = document.getElementById(elementId);
+    if (el) {
+        el.innerText = `${rowCount} Satır`;
+    }
+}
+
+// Timer and Analysis Modal Helpers
+function startQueryTimer() {
+    if (queryTimerInterval) return; // already running
+    
+    queryStartTime = Date.now();
+    const timerLabel = document.getElementById("query-timer-label");
+    if (timerLabel) {
+        timerLabel.style.display = "block";
+        timerLabel.innerHTML = `<svg class="timer-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor" style="width:16px; height:16px; display:inline-block; vertical-align:middle; margin-right:4px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Geçen Süre: <strong>00:00</strong> (Kalan: <strong>Hesaplanıyor...</strong>)`;
+    }
+    
+    queryTimerInterval = setInterval(updateQueryTimerUI, 1000);
+}
+
+function updateQueryTimerUI() {
+    if (!queryStartTime) return;
+    
+    const elapsedMs = Date.now() - queryStartTime;
+    const elapsedSeconds = Math.floor(elapsedMs / 1000);
+    
+    // Calculate unique GCB progress
+    const allUniqueGcbs = [...new Set(allRows.map(item => item.gcb).filter(Boolean))];
+    const totalUnique = allUniqueGcbs.length;
+    
+    let finishedUnique = 0;
+    allUniqueGcbs.forEach(gcb => {
+        const rows = allRows.filter(r => r.gcb === gcb);
+        const status = getGcbConsolidatedStatus(rows);
+        if (status !== "Bekliyor" && status !== "Sorgulanıyor...") {
+            finishedUnique++;
+        }
+    });
+    
+    let elapsedStr = formatSeconds(elapsedSeconds);
+    let remainingStr = "--:--";
+    
+    if (finishedUnique > 0 && totalUnique > finishedUnique) {
+        const avgTimePerGcb = elapsedSeconds / finishedUnique;
+        const remainingGcbs = totalUnique - finishedUnique;
+        const etaSeconds = Math.round(remainingGcbs * avgTimePerGcb);
+        remainingStr = formatSeconds(etaSeconds);
+    } else if (totalUnique === finishedUnique && totalUnique > 0) {
+        remainingStr = "00:00";
+    } else if (finishedUnique === 0 && totalUnique > 0) {
+        const etaSeconds = totalUnique * 12; // Fallback estimate
+        remainingStr = formatSeconds(etaSeconds);
+    }
+    
+    const timerLabel = document.getElementById("query-timer-label");
+    if (timerLabel) {
+        timerLabel.innerHTML = `<svg class="timer-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor" style="width:16px; height:16px; display:inline-block; vertical-align:middle; margin-right:4px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Geçen Süre: <strong>${elapsedStr}</strong> (Kalan: <strong>${remainingStr}</strong>)`;
+    }
+}
+
+function stopQueryTimer(showAnalysis = false) {
+    if (queryTimerInterval) {
+        clearInterval(queryTimerInterval);
+        queryTimerInterval = null;
+    }
+    
+    const elapsedMs = queryStartTime ? (Date.now() - queryStartTime) : 0;
+    const elapsedSeconds = Math.floor(elapsedMs / 1000);
+    
+    if (showAnalysis && elapsedSeconds > 1) {
+        showQueryAnalysisModal(elapsedSeconds);
+    }
+    
+    queryStartTime = null;
+}
+
+function showQueryAnalysisModal(elapsedSeconds) {
+    const allUniqueGcbs = [...new Set(allRows.map(item => item.gcb).filter(Boolean))];
+    const totalUnique = allUniqueGcbs.length;
+    
+    let finishedUnique = 0;
+    let successUnique = 0;
+    let notClosedUnique = 0;
+    
+    allUniqueGcbs.forEach(gcb => {
+        const rows = allRows.filter(r => r.gcb === gcb);
+        const status = getGcbConsolidatedStatus(rows);
+        if (status !== "Bekliyor" && status !== "Sorgulanıyor...") {
+            finishedUnique++;
+            if (status === "İntaç Tarihi Var") successUnique++;
+            if (status === "Kapanmamış") notClosedUnique++;
+        }
+    });
+    
+    const avgTime = finishedUnique > 0 ? (elapsedSeconds / finishedUnique).toFixed(1) + " sn" : "0 sn";
+    // Success rate is based on successfully resolved queries (both Closed and Not Closed are successful portal results)
+    const totalSuccessfulResolved = successUnique + notClosedUnique;
+    const successRate = finishedUnique > 0 ? Math.round((totalSuccessfulResolved / finishedUnique) * 100) : 0;
+    
+    const totalTimeEl = document.getElementById("analysis-total-time");
+    const avgTimeEl = document.getElementById("analysis-avg-time");
+    const successCountEl = document.getElementById("analysis-success-count");
+    const notClosedEl = document.getElementById("analysis-not-closed");
+    const efficiencyBar = document.getElementById("analysis-efficiency-bar");
+    const efficiencyText = document.getElementById("analysis-efficiency-text");
+    
+    if (totalTimeEl) totalTimeEl.innerText = formatSeconds(elapsedSeconds);
+    if (avgTimeEl) avgTimeEl.innerText = avgTime;
+    if (successCountEl) successCountEl.innerText = successUnique;
+    if (notClosedEl) notClosedEl.innerText = notClosedUnique;
+    if (efficiencyBar) efficiencyBar.style.width = successRate + "%";
+    if (efficiencyText) efficiencyText.innerText = `%${successRate} Başarı Oranı (${totalSuccessfulResolved} / ${finishedUnique} GCB)`;
+    
+    const modal = document.getElementById("analysis-modal");
+    if (modal) {
+        modal.style.display = "flex";
+        // Trigger reflow for transition
+        void modal.offsetWidth;
+        modal.classList.add("fade-in");
+    }
+}
+
+function closeAnalysisModal() {
+    const modal = document.getElementById("analysis-modal");
+    if (modal) {
+        modal.classList.remove("fade-in");
+        setTimeout(() => {
+            modal.style.display = "none";
+        }, 300);
+    }
+}
+
+function formatSeconds(totalSeconds) {
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+window.closeAnalysisModal = closeAnalysisModal;
+
+
+// Animated numerical count-up helper
+// Uses element._currentValue to track the real numeric value instead of parsing textContent,
+// which prevents corrupted/negative numbers from race conditions during rapid WebSocket updates.
+function animateCounter(element, targetValue) {
+    // Ensure targetValue is a valid non-negative integer
+    targetValue = Math.max(0, Math.round(targetValue)) || 0;
+    
+    const duration = 500;
+    
+    // Cancel any ongoing animation for this element
+    if (element._animId) {
+        cancelAnimationFrame(element._animId);
+        element._animId = null;
+    }
+    
+    // Initialize _currentValue from the stored property, NOT from textContent
+    if (typeof element._currentValue !== 'number' || isNaN(element._currentValue) || element._currentValue < 0) {
+        element._currentValue = 0;
+    }
+    
+    const start = element._currentValue;
+    
+    // If already at target, just set and return
+    if (start === targetValue) {
+        element.textContent = targetValue;
+        element._currentValue = targetValue;
+        return;
+    }
+    
+    const startTime = performance.now();
+    function update(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+        const current = Math.round(start + (targetValue - start) * eased);
+        element.textContent = Math.max(0, current);
+        if (progress < 1) {
+            element._animId = requestAnimationFrame(update);
+        } else {
+            element.textContent = targetValue;
+            element._currentValue = targetValue;
+            element._animId = null;
+        }
+    }
+    element._animId = requestAnimationFrame(update);
+    
+    // Pulse card animation (only if value actually changed)
+    if (start !== targetValue) {
+        const card = element.closest(".stat-card");
+        if (card) {
+            card.classList.remove("stat-card-pulse");
+            void card.offsetWidth; // force layout reflow
+            card.classList.add("stat-card-pulse");
+        }
+    }
+}
+
 // Table search and column filter combined
 function filterTable() {
-    const query = searchInput.value.toLowerCase().strip();
+    const query = searchInput.value.toLowerCase().trim();
     const statusFilter = document.getElementById("filter-status").value;
     const typeFilter = document.getElementById("filter-type").value;
     
@@ -711,8 +1287,15 @@ function filterTable() {
             (item.gcb && item.gcb.toLowerCase().includes(query))
         );
         
-        // 2. Status Filter
-        const state = queryStatus[item.row] || { intac: item.intac, status: item.status };
+        // 2. Status Filter — use same priority as updateStats
+        let state;
+        if (item.intac && item.status === "İntaç Tarihi Var") {
+            state = { intac: item.intac, status: "İntaç Tarihi Var" };
+        } else if (queryStatus[item.row]) {
+            state = queryStatus[item.row];
+        } else {
+            state = { intac: item.intac, status: item.status };
+        }
         const matchesStatus = statusFilter === "all" || state.status === statusFilter;
         
         // 3. Type (ETGB vs Beyanname) Filter
@@ -735,10 +1318,24 @@ function resetExcelTable() {
         rawInput.value = ""; // clear GCB text input
         progressBarFill.style.width = "0%";
         progressPercent.innerText = "0%";
+        
+        // Reset stat card animation state
+        [statTotal, statCompleted, statPending, statNotClosed, statErrors].forEach(el => {
+            if (el) {
+                el._currentValue = 0;
+                el.textContent = "0";
+                if (el._animId) {
+                    cancelAnimationFrame(el._animId);
+                    el._animId = null;
+                }
+            }
+        });
+        
+        soundEngine.playReset();
     }
 }
 
-// Date formatter helper (converts YYYY-MM-DD to D.MM.YYYY e.g. 6.06.2026)
+// Date formatter helper (converts YYYY-MM-DD or other formats to Turkish DD.MM.YYYY format)
 function formatDate(dateStr) {
     if (!dateStr) return "";
     dateStr = String(dateStr).trim();
@@ -747,15 +1344,15 @@ function formatDate(dateStr) {
     if (match) {
         const year = match[1];
         const month = match[2];
-        const day = parseInt(match[3], 10); // strip leading zeros, e.g. 06 -> 6
+        const day = match[3]; // Keep leading zeros!
         return `${day}.${month}.${year}`;
     }
     // If it's already in D.MM.YYYY or DD.MM.YYYY format
     if (dateStr.includes(".")) {
         const parts = dateStr.split(".");
         if (parts.length === 3) {
-            const day = parseInt(parts[0], 10); // strip leading zeros
-            const month = parts[1];
+            const day = parts[0].padStart(2, '0'); // pad day with leading zero
+            const month = parts[1].padStart(2, '0'); // pad month with leading zero
             const year = parts[2].split(" ")[0]; // remove time if any
             return `${day}.${month}.${year}`;
         }
@@ -763,10 +1360,6 @@ function formatDate(dateStr) {
     return dateStr;
 }
 
-// Clean prototype helper
-String.prototype.strip = function() {
-    return this.replace(/^\s+|\s+$/g, '');
-};
 
 // Cooldown state managers
 function startCooldown(gcb) {

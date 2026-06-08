@@ -6,8 +6,8 @@
     <title>Gümrük Beyanname Sorgulama Otomasyonu</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=3.0">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23E53E3E'/%3E%3Cstop offset='100%25' stop-color='%239B2C2C'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' rx='22' fill='url(%23g)'/%3E%3Cpath d='M30 25h30l15 15v35c0 3-2 5-5 5H30c-3 0-5-2-5-5V30c0-3 2-5 5-5z' fill='%23FFFFFF'/%3E%3Cpath d='M60 25v15h15' fill='none' stroke='%23E53E3E' stroke-width='4'/%3E%3Cpath d='M38 52l6 6 18-18' fill='none' stroke='%23E53E3E' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -94,10 +94,11 @@
 
         <!-- STATS GRID -->
         <section class="stats-grid">
-            <div class="stat-card glass">
+            <div class="stat-card stat-card-total glass">
                 <div class="stat-info">
-                    <span class="stat-label">Toplam Satır</span>
+                    <span class="stat-label">Toplam Beyan</span>
                     <span id="stat-total" class="stat-value">0</span>
+                    <span id="stat-total-rows" class="stat-subtitle">0 Satır</span>
                 </div>
                 <div class="stat-icon-wrapper bg-indigo-light">
                     <svg class="stat-icon-svg text-indigo" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor">
@@ -105,10 +106,11 @@
                     </svg>
                 </div>
             </div>
-            <div class="stat-card glass">
+            <div class="stat-card stat-card-completed glass">
                 <div class="stat-info">
-                    <span class="stat-label">İntaç Tarihi Olan</span>
+                    <span class="stat-label">İntaç Olan</span>
                     <span id="stat-completed" class="stat-value">0</span>
+                    <span id="stat-completed-rows" class="stat-subtitle">0 Satır</span>
                 </div>
                 <div class="stat-icon-wrapper bg-emerald-light">
                     <svg class="stat-icon-svg text-emerald" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor">
@@ -116,25 +118,39 @@
                     </svg>
                 </div>
             </div>
-            <div class="stat-card glass">
+            <div class="stat-card stat-card-pending glass">
                 <div class="stat-info">
                     <span class="stat-label">Sorgu Bekleyen</span>
                     <span id="stat-pending" class="stat-value">0</span>
+                    <span id="stat-pending-rows" class="stat-subtitle">0 Satır</span>
                 </div>
-                <div class="stat-icon-wrapper bg-amber-light">
-                    <svg class="stat-icon-svg text-amber" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor">
+                <div class="stat-icon-wrapper bg-blue-light">
+                    <svg class="stat-icon-svg text-blue" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                 </div>
             </div>
-            <div class="stat-card glass">
+            <div class="stat-card stat-card-not-closed glass">
                 <div class="stat-info">
-                    <span class="stat-label">Hatalı / Kapanmamış</span>
+                    <span class="stat-label">Kapanmamış</span>
+                    <span id="stat-not-closed" class="stat-value">0</span>
+                    <span id="stat-not-closed-rows" class="stat-subtitle">0 Satır</span>
+                </div>
+                <div class="stat-icon-wrapper bg-amber-light">
+                    <svg class="stat-icon-svg text-amber" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                    </svg>
+                </div>
+            </div>
+            <div class="stat-card stat-card-errors glass">
+                <div class="stat-info">
+                    <span class="stat-label">Hatalı</span>
                     <span id="stat-errors" class="stat-value">0</span>
+                    <span id="stat-errors-rows" class="stat-subtitle">0 Satır</span>
                 </div>
                 <div class="stat-icon-wrapper bg-red-light">
                     <svg class="stat-icon-svg text-red" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                 </div>
             </div>
@@ -176,6 +192,7 @@
                 <div class="progress-bar-bg">
                     <div id="progress-bar-fill" class="progress-bar-fill" style="width: 0%"></div>
                 </div>
+                <div id="query-timer-label" class="query-timer-label" style="display: none;">Geçen Süre: 00:00 (Kalan: --:--)</div>
             </div>
         </section>
 
@@ -202,34 +219,63 @@
                     <!-- TAB 1: DATA INPUT -->
                     <div id="tab-input" class="tab-content active">
                         <div class="input-panel-body">
-                            <!-- Raw list paste area -->
-                            <div class="textarea-container">
-                                <label for="raw-input" class="input-label-tag">Beyanname Listesi (Serbest Metin Girişi)</label>
-                                <textarea id="raw-input" placeholder="Sorgulanacak beyanname numaralarını buraya yapıştırın...&#10;Örnek format:&#10;00000000XX00000000"></textarea>
-                                <button id="btn-parse-query" class="btn btn-primary btn-full-width">
-                                    <svg class="btn-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                            <!-- Segmented control for toggling between Excel and Free Text -->
+                            <div class="input-mode-selector">
+                                <button type="button" class="mode-btn active" id="btn-mode-excel">
+                                    <svg class="mode-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 5.25h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5" />
                                     </svg>
-                                    Ayrıştır & Sorgula
+                                    Excel Yükleme
                                 </button>
-                                <div class="info-tip-box">
-                                    <svg class="info-tip-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 111.063.852l-.708.283a.75.75 0 00-.475.694V15.75m0-6h.008v.008H12V9.75zM21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                <button type="button" class="mode-btn" id="btn-mode-text">
+                                    <svg class="mode-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
                                     </svg>
-                                    <span>Gümrük kısıtlamaları nedeniyle bir beyanname en sık 5 dakikada bir sorgulanabilmektedir.</span>
+                                    Serbest Metin
+                                </button>
+                            </div>
+
+                            <!-- Section 1: Excel Upload -->
+                            <div id="section-mode-excel" class="mode-section active">
+                                <div class="upload-container">
+                                    <label class="input-label-tag">Yeni Excel Dosyası Yükle</label>
+                                    <div id="drop-zone" class="drop-zone">
+                                        <svg class="drop-zone-border-svg" width="100%" height="100%">
+                                            <rect x="0" y="0" width="100%" height="100%" rx="4" fill="none" />
+                                        </svg>
+                                        <div class="upload-icon-container">
+                                            <div class="pulse-ring ring-1"></div>
+                                            <div class="pulse-ring ring-2"></div>
+                                            <svg class="upload-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                                            </svg>
+                                        </div>
+                                        <span class="drop-zone-text">Yeni Dosyayı Sürükleyin veya Dosya Seçin</span>
+                                        <input type="file" id="file-input" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" style="display: none;">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Section 2: Raw list paste area -->
+                            <div id="section-mode-text" class="mode-section">
+                                <div class="textarea-container">
+                                    <label for="raw-input" class="input-label-tag">Beyanname Listesi (Serbest Metin Girişi)</label>
+                                    <textarea id="raw-input" placeholder="Sorgulanacak beyanname numaralarını buraya yapıştırın...&#10;Örnek format:&#10;00000000XX00000000"></textarea>
+                                    <button id="btn-parse-query" class="btn btn-primary btn-full-width">
+                                        <svg class="btn-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                                        </svg>
+                                        Ayrıştır & Sorgula
+                                    </button>
                                 </div>
                             </div>
                             
-                            <!-- Drag-and-drop excel upload -->
-                            <div class="upload-container">
-                                <label class="input-label-tag">Yeni Excel Dosyası Yükle</label>
-                                <div id="drop-zone" class="drop-zone">
-                                    <svg class="upload-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                                    </svg>
-                                    <span class="drop-zone-text">Yeni Dosyayı Sürükleyin veya Dosya Seçin</span>
-                                    <input type="file" id="file-input" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" style="display: none;">
-                                </div>
+                            <!-- Info Tip Box (shared) -->
+                            <div class="info-tip-box">
+                                <svg class="info-tip-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 111.063.852l-.708.283a.75.75 0 00-.475.694V15.75m0-6h.008v.008H12V9.75zM21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <span>Gümrük kısıtlamaları nedeniyle bir beyanname en sık 5 dakikada bir sorgulanabilmektedir.</span>
                             </div>
                         </div>
                     </div>
@@ -369,6 +415,73 @@
                 </div>
             </div>
         </footer>
+    </div>
+
+    <!-- QUERY ANALYSIS MODAL -->
+    <div id="analysis-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center;">
+                    <svg class="modal-header-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="#e53e3e" style="width:24px; height:24px; margin-right: 8px;">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3v16.5M21 19.5H3.75M6.75 12h3m3-4.5h3m3-4.5h3M6.75 19.5h3v-7.5h-3v7.5zm6 0h3V8.25h-3v11.25zm6 0h3V3.75h-3v15.75z" />
+                    </svg>
+                    <h2>Sorgulama Analiz Raporu</h2>
+                </div>
+                <button onclick="closeAnalysisModal()" class="btn-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="analysis-grid">
+                    <div class="analysis-stat">
+                        <svg class="analysis-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="#3b82f6" style="width:32px; height:32px; flex-shrink:0;">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div class="analysis-meta">
+                            <span class="analysis-label">Toplam Süre</span>
+                            <span id="analysis-total-time" class="analysis-value">0s</span>
+                        </div>
+                    </div>
+                    <div class="analysis-stat">
+                        <svg class="analysis-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="#71717a" style="width:32px; height:32px; flex-shrink:0;">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                        </svg>
+                        <div class="analysis-meta">
+                            <span class="analysis-label">Beyan Başı Ort. Süre</span>
+                            <span id="analysis-avg-time" class="analysis-value">0s</span>
+                        </div>
+                    </div>
+                    <div class="analysis-stat">
+                        <svg class="analysis-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="#10b981" style="width:32px; height:32px; flex-shrink:0;">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div class="analysis-meta">
+                            <span class="analysis-label">İntaç Bulunan</span>
+                            <span id="analysis-success-count" class="analysis-value">0</span>
+                        </div>
+                    </div>
+                    <div class="analysis-stat">
+                        <svg class="analysis-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="#f59e0b" style="width:32px; height:32px; flex-shrink:0;">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                        </svg>
+                        <div class="analysis-meta">
+                            <span class="analysis-label">Kapanmamış</span>
+                            <span id="analysis-not-closed" class="analysis-value">0</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="analysis-chart-container">
+                    <div class="analysis-progress-wrapper">
+                        <div class="analysis-progress-label">Sorgulama Başarı Oranı</div>
+                        <div class="analysis-progress-bar">
+                            <div id="analysis-efficiency-bar" class="efficiency-bar-fill" style="width: 0%"></div>
+                        </div>
+                        <div id="analysis-efficiency-text" class="analysis-efficiency-text">%0 Başarı Oranı</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeAnalysisModal()" class="btn btn-primary">Tamam</button>
+            </div>
+        </div>
     </div>
 
     <script src="app.js"></script>

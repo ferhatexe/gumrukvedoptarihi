@@ -22,3 +22,8 @@ captcha_sample_*.png
 EXPORT_CUSTOM.XLSX
 EXPORT_UPDATED.XLSX
 *.log
+scratch/
+*.xlsx
+*.XLSX
+digit_references_v*.json
+*.zip

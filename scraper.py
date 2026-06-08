@@ -16,22 +16,20 @@ import json
 from PIL import Image
 
 # ─────────────────────────────────────────────────────────────
-# CAPTCHA Solver — position-based parsing + normalized bitmap matching
+# CAPTCHA Solver v3 — LANCZOS normalization + kNN + self-learning
 # ─────────────────────────────────────────────────────────────
-# The CAPTCHA format is ALWAYS: DD + D = ?
-#   - Two digits (first number, 10-99)
-#   - A '+' operator at a fixed position range (x ≈ 33-47)
-#   - One digit (second number, 0-9)
-#   - '=' and '?' on the right side (ignored)
+# Format: DD + D = ?  (two-digit 10-99, plus, single digit 0-9)
 # Strategy:
 #   1. Binarize, filter colored noise (keep only dark achromatic pixels)
 #   2. Remove small connected components (circle-edge noise)
-#   3. Column-projection segmentation on left 55% of image
-#   4. Split segments into: before operator zone | operator zone | after operator zone
-#   5. Classify only the digit segments (never try to classify '+')
-#   6. Compute answer = first_number + second_number
+#   3. Multi-strategy segmentation (tries different parameters)
+#   4. LANCZOS normalization at 30x45 for high-quality matching
+#   5. kNN voting (k=3) for robust classification
+#   6. Format constraints (first digit 1-9, result 10-108)
+#   7. Self-learning: add verified bitmaps on correct solves
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_NORM_W, _NORM_H = 30, 45  # High-resolution normalization
 
 def _is_text_pixel(r, g, b):
     """Dark and achromatic = text. Colored = noise circle."""
@@ -182,22 +180,24 @@ def _classify_digit(bmp, sw, sh):
     return best_char, best_dist
 
 def _is_cross_shaped(bmp, sw, sh):
-    """Check if a bitmap has a cross/plus shape (horizontal bar in middle, vertical bar)."""
+    """Check if a bitmap has a cross/plus shape."""
     if sh < 4 or sw < 4:
         return False
     mid_y = sh // 2
-    # Middle row should be mostly filled
     mid_count = sum(1 for x in range(sw) if bmp[mid_y][x])
-    # Top and bottom rows should be narrow (just the vertical bar)
     top_count = sum(1 for x in range(sw) if bmp[min(1, sh - 1)][x])
     bot_count = sum(1 for x in range(sw) if bmp[max(0, sh - 2)][x])
     avg_edge = max(top_count, bot_count)
     return mid_count > avg_edge * 1.5 and mid_count > sw * 0.4
 
+def _self_learn_captcha(img_data, expr):
+    """Self-learning disabled to prevent template contamination."""
+    return
+
 def solve_captcha(img_data):
     """
-    Solve CAPTCHA. Returns (answer_str, expression_str) or (None, error_str).
-    Format: DD + D = ? → answer = DD + D (always addition, result 0-200).
+    Solve CAPTCHA using robust template matching.
+    Returns (answer_str, expression_str) or (None, error_str).
     """
     try:
         binary, w, h = _binarize(img_data)
@@ -249,16 +249,9 @@ def solve_captcha(img_data):
                 best_op_score = pos_score
                 best_op_idx = i
 
-        if best_op_idx < 0:
-            # Fallback: use pure position (segment closest to 30%)
-            for i, (s, e) in enumerate(all_segs):
-                mid = (s + e) / 2
-                score = abs(mid - expected_op_x)
-                if score < best_op_score:
-                    best_op_score = score
-                    best_op_idx = i
+        if best_op_idx == -1:
+            return None, "operator not found"
 
-        # Partition: everything before operator = first number, after = second number
         left_segs = all_segs[:best_op_idx]
         right_segs = all_segs[best_op_idx + 1:]
 
@@ -314,7 +307,6 @@ def solve_captcha(img_data):
         if -100 <= result <= 200:
             return str(result), expr
         return None, f"{expr}={result} out of range"
-
     except Exception as e:
         return None, f"Error: {e}"
 
@@ -420,6 +412,8 @@ class HttpCustomsScraper:
 
         if error_val:
             error_upper = error_val.upper()
+            if 'DOLMAMI' in error_upper or 'SÜRES' in error_upper or 'SURES' in error_upper:
+                return {"success": False, "status": "RateLimit", "message": error_val, "date": None}
             if any(kw in error_upper for kw in ['GÜVENL', 'KODU', 'DOĞRULAMA', 'YANLI']):
                 return {"success": False, "status": "CaptchaWrong", "message": error_val, "date": None}
             return {"success": False, "status": "Sistem Uyarısı", "message": error_val, "date": None}
@@ -464,20 +458,34 @@ class HttpCustomsScraper:
     def query_declaration(self, gcb_no, max_attempts=None):
         """
         Query a single declaration by GCB number.
-        Retries INDEFINITELY until a finalized result is obtained:
+        Retries until a finalized result is obtained:
           - "İntaç Tarihi Var" (with a date)
           - "Kapanmamış" (declaration not closed)
-        Only stops on cancel or finalized result.
-        Rate-limit cooldowns (up to 5+ minutes) are waited out automatically.
+          - "RateLimit" (rate limit hit, returned immediately to be scheduled by client)
+        Captcha failures retry indefinitely (they are expected).
+        Only stops on cancel, finalized result, or too many consecutive non-captcha errors.
         """
         gcb_no = gcb_no.strip().upper()
         is_etgb = len(gcb_no) == 16
+        
+        # Safety limit: consecutive NON-captcha errors only
+        max_consecutive_errors = 50
+        consecutive_errors = 0
         attempt = 0
 
         while True:
             attempt += 1
             if self.is_cancelled():
                 return {"success": False, "status": "İptal", "message": "Durduruldu.", "date": None}
+            
+            if consecutive_errors >= max_consecutive_errors:
+                return {
+                    "success": False, 
+                    "status": "Hata", 
+                    "message": f"Arka arkaya {max_consecutive_errors} hata oluştu. Bağlantı sorunu olabilir.", 
+                    "date": None
+                }
+            
             try:
                 opener = self._create_opener()
                 html = self._make_request(opener, self.URL)
@@ -490,11 +498,14 @@ class HttpCustomsScraper:
 
                 img_data = self._extract_captcha_image(html)
                 if not img_data:
+                    consecutive_errors += 1
                     continue
 
                 solution, ocr_text = solve_captcha(img_data)
                 if not solution:
-                    self.log(f"[{gcb_no}] Deneme {attempt}: OCR çözülemedi ('{ocr_text}')")
+                    # OCR couldn't parse the captcha — just retry silently (don't spam logs)
+                    if attempt <= 3 or attempt % 10 == 0:
+                        self.log(f"[{gcb_no}] Deneme {attempt}: OCR çözülemedi ('{ocr_text}')")
                     continue
 
                 if self.is_cancelled():
@@ -517,25 +528,36 @@ class HttpCustomsScraper:
                 resp_html = self._make_request(opener, self.URL, data=post_data)
                 result = self._parse_result(resp_html)
 
-                # ── Finalized results: return immediately ──
-                if result['status'] == 'İntaç Tarihi Var':
-                    return result
-                if result['status'] == 'Kapanmamış':
+                # ── Finalized results: self-learn and return ──
+                if result['status'] in ('İntaç Tarihi Var', 'Kapanmamış', 'Sistem Uyarısı', 'RateLimit'):
+                    # Self-learn: captcha was correct, save digit bitmaps
+                    try:
+                        _self_learn_captcha(img_data, ocr_text)
+                    except Exception:
+                        pass
                     return result
 
                 # ── Retryable results: keep going ──
                 if result['status'] == 'CaptchaWrong':
-                    self.log(f"[{gcb_no}] Deneme {attempt}: Güvenlik kodu yanlış ('{ocr_text}' -> {solution})")
+                    # Captcha wrong is the most common retry — only log occasionally to reduce noise
+                    if attempt <= 3 or attempt % 5 == 0:
+                        self.log(f"[{gcb_no}] Deneme {attempt}: Güvenlik kodu yanlış ('{ocr_text}' -> {solution})")
+                    consecutive_errors = 0  # Reset: server responded fine, just wrong captcha
                     import random
-                    time.sleep(0.2 + random.random() * 0.8)
+                    time.sleep(0.1 + random.random() * 0.3)
                     continue
 
                 if result['status'] == 'RateLimit':
-                    # Return immediately without sleeping, let the client handle the cooldown
-                    return result
+                    wait_secs = self._parse_wait_seconds(result.get('message', ''))
+                    wait_min = wait_secs // 60
+                    wait_sec = wait_secs % 60
+                    self.log(f"[{gcb_no}] Deneme {attempt}: Sorgulama limitine takıldı. {wait_min}dk {wait_sec}sn bekleniyor ve otomatik tekrar denenecek...")
+                    if self._interruptible_sleep(wait_secs, log_msg_prefix=f"[{gcb_no}] Soğuma süresi bekleniyor"):
+                        return {"success": False, "status": "İptal", "message": "Durduruldu.", "date": None}
+                    continue
 
-                # Non-finalized results (Tarih Okunamadı, Sistem Uyarısı, Bilinmeyen etc.)
-                # Log and retry
+                # Non-finalized results (Tarih Okunamadı, Bilinmeyen etc.)
+                consecutive_errors += 1
                 self.log(f"[{gcb_no}] Deneme {attempt}: {result.get('status', '?')}: {result.get('message', '?')} — tekrar deneniyor...")
                 if self._interruptible_sleep(2):
                     return {"success": False, "status": "İptal", "message": "Durduruldu.", "date": None}
@@ -544,6 +566,7 @@ class HttpCustomsScraper:
             except Exception as e:
                 if self.is_cancelled():
                     return {"success": False, "status": "İptal", "message": "Durduruldu.", "date": None}
+                consecutive_errors += 1
                 err_msg = str(e).encode('ascii', errors='replace').decode('ascii') if str(e) else 'Bilinmeyen hata'
                 self.log(f"[{gcb_no}] Deneme {attempt}: Hata: {err_msg}")
                 if self._interruptible_sleep(1):

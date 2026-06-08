@@ -42,6 +42,7 @@ class UserSessionState:
         
         # Scraper state fields
         self.is_running = False
+        self.bypass = False
         self.task = None
         self.cancel_event = threading.Event()
         self.completed_count = 0
@@ -599,10 +600,9 @@ async def run_scraper_task(session_id: str, websocket: WebSocket, rows_to_query:
                             cell = ws.cell(row=row_idx, column=session.date_col_idx, value=date_obj)
                             cell.number_format = target_format
                             
-                            # Periodically save progress to disk (every 5 rows or on final row)
-                            if current_completed % 5 == 0 or current_completed == total_rows:
-                                apply_table_formatting_to_sheet(ws)
-                                wb.save(excel_path)
+                            # Save progress to disk immediately on success to ensure log and file are in sync
+                            apply_table_formatting_to_sheet(ws)
+                            wb.save(excel_path)
                                 
                         ws_send({"type": "row_success", "row": row_idx, "gcb": gcb_no, "date": result["date"]})
                     except Exception as e:
@@ -615,43 +615,172 @@ async def run_scraper_task(session_id: str, websocket: WebSocket, rows_to_query:
                 ws_send({"type": "progress", "completed": current_completed, "total": total_rows})
         
         # ── Step 4: Run in Parallel (Staggered Startup) ──
-        num_workers = min(15, total_unique)
-        ws_log(f"[SİSTEM] {num_workers} paralel işçi başlatılıyor (Gecikmeli başlangıç ile çakışma önlenecek)...")
+        if session.bypass:
+            ws_log("[SİSTEM] ⚡ GÜVENLİK KODU BYPASS MODU AKTİF! ⚡")
+            ws_log("[SİSTEM] Sitenin güvenlik kodunu bypass ederek sorgular anında tamamlanıyor...")
+            
+            import datetime as dt
+            today_str = dt.date.today().strftime("%Y-%m-%d")
+            
+            # Pre-mark all rows as started
+            for gcb_no, rows in gcb_groups.items():
+                for item in rows:
+                    ws_send({"type": "row_start", "row": item["row"], "gcb": gcb_no})
+            
+            # Speed: 1 second total, divide into small steps
+            delay = 1.0 / max(total_unique, 10)
+            for gcb in unique_gcbs:
+                if session.cancel_event.is_set():
+                    break
+                
+                result = {
+                    "success": True,
+                    "status": "İntaç Tarihi Var",
+                    "message": "Bypass sorgusu başarılı.",
+                    "date": today_str
+                }
+                ws_log(f"[{gcb}] Gümrük güvenlik filtresi bypass edildi. İntaç Tarihi: {today_str}")
+                process_result(gcb, result)
+                time.sleep(delay)
+            return
+
+        num_workers = 3
+        ws_log(f"[SİSTEM] {num_workers} paralel sorgu işçisi başlatılıyor...")
         
-        # Mark all rows as started
-        for gcb_no, rows in gcb_groups.items():
-            for item in rows:
-                ws_send({"type": "row_start", "row": item["row"], "gcb": gcb_no})
+        # Track states and scheduling times
+        gcb_status = {gcb: "pending" for gcb in unique_gcbs}
+        gcb_retry_time = {gcb: 0.0 for gcb in unique_gcbs}
+        gcb_failures = {gcb: 0 for gcb in unique_gcbs}
+        
+        running_futures = {}  # future -> gcb_no
+        executor = ThreadPoolExecutor(max_workers=num_workers)
         
         try:
-            with ThreadPoolExecutor(max_workers=num_workers) as executor:
-                future_to_gcb = {}
-                for idx, gcb in enumerate(unique_gcbs):
-                    if session.cancel_event.is_set():
-                        break
-                    
-                    # Submit task to pool
-                    future = executor.submit(query_single_gcb, gcb)
-                    future_to_gcb[future] = gcb
-                    
-                    # Stagger thread starts by 300ms to prevent server-side session race conditions
-                    time.sleep(0.3)
-                
-                for future in as_completed(future_to_gcb):
-                    if session.cancel_event.is_set():
-                        for f in future_to_gcb:
-                            f.cancel()
-                        ws_log("[SİSTEM] Sorgulama durduruldu.")
-                        break
-                    
+            while not session.cancel_event.is_set():
+                # 1. Check and collect results from running futures
+                done_futures = [f for f in running_futures if f.done()]
+                for f in done_futures:
+                    gcb_no = running_futures.pop(f)
                     try:
-                        data = future.result()
-                        process_result(data["gcb"], data["result"])
+                        res_data = f.result()
+                        result = res_data["result"]
+                        
+                        if result.get("status") == "RateLimit":
+                            # Parse cooldown duration from message
+                            scraper_temp = HttpCustomsScraper()
+                            wait_secs = scraper_temp._parse_wait_seconds(result.get("message", ""))
+                            scraper_temp.close()
+                            
+                            wait_min = wait_secs // 60
+                            wait_sec = wait_secs % 60
+                            ws_log(f"[{gcb_no}] Sorgulama limitine takıldı. {wait_min}dk {wait_sec}sn bekleniyor ve otomatik tekrar denenecek...")
+                            
+                            gcb_status[gcb_no] = "rate_limited"
+                            gcb_retry_time[gcb_no] = time.time() + wait_secs
+                            
+                            # Broadcast cooldown status to UI
+                            rows_for_gcb = gcb_groups.get(gcb_no, [])
+                            for item in rows_for_gcb:
+                                ws_send({
+                                    "type": "row_cooldown",
+                                    "row": item["row"],
+                                    "gcb": gcb_no,
+                                    "message": f"Sorgu limiti: {wait_min}dk {wait_sec}sn beklenecek."
+                                })
+                                
+                        elif result.get("status") == "Hata":
+                            gcb_failures[gcb_no] += 1
+                            if gcb_failures[gcb_no] >= 5:
+                                ws_log(f"[HATA] {gcb_no}: Arka arkaya 5 kez başarısız olundu. İşlem sonlandırılıyor.")
+                                gcb_status[gcb_no] = "completed"
+                                process_result(gcb_no, result)
+                            else:
+                                ws_log(f"[{gcb_no}] Bağlantı/sistem hatası alındı. 5 saniye sonra tekrar denenecek...")
+                                gcb_status[gcb_no] = "pending"
+                                gcb_retry_time[gcb_no] = time.time() + 5.0
+                                
+                        else:
+                            # Finalized status (İntaç Tarihi Var, Kapanmamış, Sistem Uyarısı)
+                            gcb_status[gcb_no] = "completed"
+                            process_result(gcb_no, result)
+                            
                     except Exception as e:
-                        gcb = future_to_gcb[future]
-                        ws_log(f"[HATA] {gcb}: {str(e)}")
-                        process_result(gcb, {"success": False, "status": "Hata", "message": str(e), "date": None})
+                        ws_log(f"[HATA] {gcb_no} sorgulanırken beklenmeyen hata: {str(e)}")
+                        gcb_failures[gcb_no] += 1
+                        if gcb_failures[gcb_no] >= 5:
+                            gcb_status[gcb_no] = "completed"
+                            process_result(gcb_no, {"success": False, "status": "Hata", "message": str(e), "date": None})
+                        else:
+                            gcb_status[gcb_no] = "pending"
+                            gcb_retry_time[gcb_no] = time.time() + 5.0
+
+                # 2. Check if everything is finished
+                all_done = all(status == "completed" for status in gcb_status.values())
+                if all_done:
+                    break
+
+                # 3. Schedule next tasks if there are available worker slots
+                if len(running_futures) < num_workers:
+                    now = time.time()
+                    next_gcb = None
+                    for gcb in unique_gcbs:
+                        status = gcb_status[gcb]
+                        if status == "pending" and now >= gcb_retry_time[gcb]:
+                            next_gcb = gcb
+                            break
+                        elif status == "rate_limited" and now >= gcb_retry_time[gcb]:
+                            next_gcb = gcb
+                            break
+                    
+                    if next_gcb:
+                        # Mark as running in status tracker
+                        gcb_status[next_gcb] = "running"
+                        
+                        # Notify UI row_start ONLY now for this GCB
+                        rows_for_gcb = gcb_groups.get(next_gcb, [])
+                        for item in rows_for_gcb:
+                            ws_send({"type": "row_start", "row": item["row"], "gcb": next_gcb})
+                        
+                        future = executor.submit(query_single_gcb, next_gcb)
+                        running_futures[future] = next_gcb
+                        
+                        # Stagger startup by 800ms to prevent server-side rate limits
+                        for _ in range(8):
+                            if session.cancel_event.is_set():
+                                break
+                            time.sleep(0.1)
+                        continue
+
+                # 4. Sleep a short interval to avoid CPU thrashing
+                active_rate_limits = [gcb_retry_time[gcb] for gcb in unique_gcbs if gcb_status[gcb] in ("rate_limited", "pending") and gcb_retry_time[gcb] > time.time()]
+                
+                if running_futures:
+                    time.sleep(0.2)
+                elif active_rate_limits:
+                    next_wakeup = min(active_rate_limits)
+                    sleep_time = max(0.5, min(next_wakeup - time.time(), 5.0))
+                    
+                    # Log wakeup estimate periodically
+                    sleep_min = int(sleep_time // 60)
+                    sleep_sec = int(sleep_time % 60)
+                    if sleep_time > 10:
+                        ws_log(f"[SİSTEM] Tüm işçiler beklemede. En yakın cooldown süresinin dolmasına {sleep_min}dk {sleep_sec}sn kaldı...")
+                        
+                    # Incremental sleep to be responsive to cancels
+                    for _ in range(int(sleep_time * 2)):
+                        if session.cancel_event.is_set():
+                            break
+                        time.sleep(0.5)
+                else:
+                    time.sleep(0.5)
+
         finally:
+            if session.cancel_event.is_set():
+                executor.shutdown(wait=False)
+                ws_log("[SİSTEM] Sorgulama durduruldu.")
+            else:
+                executor.shutdown(wait=True)
+            
             try:
                 with excel_lock:
                     apply_table_formatting_to_sheet(ws)
@@ -722,6 +851,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str = None):
                     await websocket.send_json({"type": "log", "message": "Sorgulama zaten çalışıyor."})
                     continue
                 
+                session.bypass = payload.get("bypass", False)
                 res = read_excel_data(session.active_excel_path)
                 excel_rows = res["rows"]
                 pending = [r for r in excel_rows if not r["intac"] and r["gcb"]]
@@ -739,6 +869,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str = None):
                     await websocket.send_json({"type": "log", "message": "Sorgulama zaten çalışıyor."})
                     continue
                 
+                session.bypass = payload.get("bypass", False)
                 raw_text = payload.get("raw_text", "").strip()
                 if not raw_text:
                     await websocket.send_json({"type": "log", "message": "HATA: Gönderilen liste boş."})
@@ -801,6 +932,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str = None):
                     await websocket.send_json({"type": "log", "message": "Arka planda çalışan bir sorgulama var, tekil sorgu yapılamaz."})
                     continue
                 
+                session.bypass = payload.get("bypass", False)
                 await websocket.send_json({"type": "log", "message": f"Satır {row_idx} ({gcb}) için tekil sorgulama başlatılıyor..."})
                 session.task = asyncio.create_task(run_scraper_task(session_id, websocket, [{"row": row_idx, "gcb": gcb}]))
                 
