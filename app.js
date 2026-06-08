@@ -610,9 +610,10 @@ function setDropZoneStatus(text, isError = false) {
 
 // Perform file upload POST request
 async function uploadExcelFile(file) {
-    if (!file.name.endsWith(".xlsx")) {
-        alert("HATA: Lütfen geçerli bir Excel dosyası (.xlsx) yükleyin.");
-        addTerminalLine("HATA: Lütfen geçerli bir Excel dosyası (.xlsx) yükleyin.", "error");
+    const ext = file.name.toLowerCase();
+    if (!ext.endsWith(".xlsx") && !ext.endsWith(".xls")) {
+        alert("HATA: Lütfen geçerli bir Excel dosyası (.xlsx veya .xls) yükleyin.");
+        addTerminalLine("HATA: Lütfen geçerli bir Excel dosyası (.xlsx veya .xls) yükleyin.", "error");
         return;
     }
     
