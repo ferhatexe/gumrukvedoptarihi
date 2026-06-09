@@ -152,7 +152,7 @@ def _load_digit_refs():
     with _REFS_LOCK:
         if _DIGIT_REFS is not None:
             return
-        ref_path = os.path.join(_SCRIPT_DIR, "digit_references_v3.json")
+        ref_path = os.path.join(_SCRIPT_DIR, "digit_references.json")
         if os.path.exists(ref_path):
             with open(ref_path, "r") as f:
                 raw = json.load(f)
@@ -322,27 +322,12 @@ class HttpCustomsScraper:
     """
     URL = "https://uygulama.gtb.gov.tr/beyannamesorgulama/"
 
-    def __init__(self, log_callback=None, cancel_check=None, proxy_url=None):
+    def __init__(self, log_callback=None, cancel_check=None):
         self.log_callback = log_callback
         self.cancel_check = cancel_check
-        self.proxy_url = proxy_url or os.environ.get("CUSTOMS_PROXY_URL")
         self.ssl_ctx = ssl.create_default_context()
         self.ssl_ctx.check_hostname = False
         self.ssl_ctx.verify_mode = ssl.CERT_NONE
-        if self.proxy_url:
-            self.log(f"[SİSTEM] Proxy aktif: {self._mask_proxy(self.proxy_url)}")
-
-    def _mask_proxy(self, url):
-        try:
-            parsed = urllib.parse.urlparse(url)
-            if parsed.password:
-                netloc = f"{parsed.username}:******@{parsed.hostname}"
-                if parsed.port:
-                    netloc += f":{parsed.port}"
-                return urllib.parse.urlunparse(parsed._replace(netloc=netloc))
-            return url
-        except Exception:
-            return "Proxy (Adres gizlendi)"
 
     def log(self, message):
         try:
@@ -360,25 +345,14 @@ class HttpCustomsScraper:
 
     def _create_opener(self):
         cj = http.cookiejar.CookieJar()
-        handlers = [
+        return urllib.request.build_opener(
             urllib.request.HTTPCookieProcessor(cj),
             urllib.request.HTTPSHandler(context=self.ssl_ctx)
-        ]
-        if self.proxy_url:
-            handlers.append(urllib.request.ProxyHandler({
-                'http': self.proxy_url,
-                'https': self.proxy_url
-            }))
-        return urllib.request.build_opener(*handlers)
+        )
 
     def _make_request(self, opener, url, data=None):
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-            'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-            'Cache-Control': 'max-age=0',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         }
         if data is not None:
             headers['Content-Type'] = 'application/x-www-form-urlencoded'
