@@ -152,7 +152,7 @@ def _load_digit_refs():
     with _REFS_LOCK:
         if _DIGIT_REFS is not None:
             return
-        ref_path = os.path.join(_SCRIPT_DIR, "digit_references.json")
+        ref_path = os.path.join(_SCRIPT_DIR, "digit_references_v3.json")
         if os.path.exists(ref_path):
             with open(ref_path, "r") as f:
                 raw = json.load(f)
