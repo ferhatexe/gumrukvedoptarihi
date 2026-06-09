@@ -58,6 +58,17 @@ def get_session(session_id: str) -> UserSessionState:
         sessions[session_id] = UserSessionState(session_id)
     return sessions[session_id]
 
+def get_display_filename(session: UserSessionState) -> str:
+    """Return a clean display filename without session_id hash prefix."""
+    if not session.active_excel_path:
+        return None
+    basename = os.path.basename(session.active_excel_path)
+    # Strip session_id prefix (format: {session_id}_{original_name})
+    prefix = f"{session.session_id}_"
+    if basename.startswith(prefix):
+        return basename[len(prefix):]
+    return basename
+
 # Keep track of active WebSocket connections per session
 class ConnectionManager:
     def __init__(self):
@@ -441,7 +452,7 @@ def get_data(session_id: str = None):
             "date_col_idx": session.date_col_idx,
             "fatura_col_idx": session.fatura_col_idx,
             "firma_col_idx": session.firma_col_idx,
-            "active_file": os.path.basename(session.active_excel_path)
+            "active_file": get_display_filename(session)
         })
     except Exception as e:
         return JSONResponse(status_code=500, content={"success": False, "message": str(e)})
@@ -476,14 +487,14 @@ async def upload_file(session_id: str = None, file: UploadFile = File(...)):
         
         return JSONResponse(content={
             "success": True, 
-            "message": f"Excel dosyası '{os.path.basename(session.active_excel_path)}' başarıyla yüklendi.", 
+            "message": f"Excel dosyası '{get_display_filename(session)}' başarıyla yüklendi.", 
             "data": res["rows"],
             "headers": res["headers"],
             "gcb_col_idx": session.gcb_col_idx,
             "date_col_idx": session.date_col_idx,
             "fatura_col_idx": session.fatura_col_idx,
             "firma_col_idx": session.firma_col_idx,
-            "active_file": os.path.basename(session.active_excel_path)
+            "active_file": get_display_filename(session)
         })
     except Exception as e:
         return JSONResponse(status_code=500, content={"success": False, "message": f"Yükleme hatası: {str(e)}"})
@@ -744,8 +755,8 @@ async def run_scraper_task(session_id: str, websocket: WebSocket, rows_to_query:
                         future = executor.submit(query_single_gcb, next_gcb)
                         running_futures[future] = next_gcb
                         
-                        # Stagger startup by 800ms to prevent server-side rate limits
-                        for _ in range(8):
+                        # Stagger startup by 300ms to prevent server-side rate limits
+                        for _ in range(3):
                             if session.cancel_event.is_set():
                                 break
                             time.sleep(0.1)
@@ -827,7 +838,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str = None):
         "is_running": session.is_running,
         "completed": session.completed_count,
         "total": session.total_count,
-        "active_file": os.path.basename(session.active_excel_path) if session.active_excel_path else None,
+        "active_file": get_display_filename(session),
         "log_history": session.log_history,
         "data": res["rows"],
         "headers": res["headers"],
@@ -916,7 +927,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str = None):
                     "date_col_idx": session.date_col_idx,
                     "fatura_col_idx": session.fatura_col_idx,
                     "firma_col_idx": session.firma_col_idx,
-                    "active_file": os.path.basename(session.active_excel_path)
+                    "active_file": get_display_filename(session)
                 })
                 
                 await websocket.send_json({"type": "log", "message": "Yeni sorgu tablosu oluşturuldu. Headless sorgular başlatılıyor..."})

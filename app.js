@@ -200,6 +200,22 @@ function getOrCreateSessionId() {
 }
 const sessionId = getOrCreateSessionId();
 
+// Strip session hash prefix from displayed filename (e.g. "abc123_EXPORT.XLSX" -> "EXPORT.XLSX")
+function cleanFileName(name) {
+    if (!name) return name;
+    // If filename starts with the session id prefix, strip it
+    const prefix = sessionId + "_";
+    if (name.startsWith(prefix)) {
+        return name.substring(prefix.length);
+    }
+    // Also strip any generic 32-char hex prefix (md5-style hash)
+    const hexMatch = name.match(/^[0-9a-f]{32}_(.+)$/i);
+    if (hexMatch) {
+        return hexMatch[1];
+    }
+    return name;
+}
+
 // DOM Elements
 const connectionDot = document.getElementById("connection-status-dot");
 const connectionText = document.getElementById("connection-status-text");
@@ -308,7 +324,7 @@ async function loadExcelData() {
             activeFirmaColIdx = json.firma_col_idx || 3;
             
             if (json.active_file) {
-                activeFileBadge.innerText = `Aktif Dosya: ${json.active_file}`;
+                activeFileBadge.innerText = `Aktif Dosya: ${cleanFileName(json.active_file)}`;
                 activeFileBadge.className = "active-file-text loaded";
                 btnDownload.classList.remove("disabled-btn");
             } else {
@@ -391,7 +407,7 @@ function handleWebSocketMessage(msg) {
             activeFirmaColIdx = msg.firma_col_idx || 3;
             
             if (msg.active_file) {
-                activeFileBadge.innerText = `Aktif Dosya: ${msg.active_file}`;
+                activeFileBadge.innerText = `Aktif Dosya: ${cleanFileName(msg.active_file)}`;
                 activeFileBadge.className = "active-file-text loaded";
                 btnDownload.classList.remove("disabled-btn");
             } else {
@@ -459,7 +475,7 @@ function handleWebSocketMessage(msg) {
             activeFirmaColIdx = msg.firma_col_idx || 3;
             
             if (msg.active_file) {
-                activeFileBadge.innerText = `Aktif Dosya: ${msg.active_file}`;
+                activeFileBadge.innerText = `Aktif Dosya: ${cleanFileName(msg.active_file)}`;
                 activeFileBadge.className = "active-file-text loaded";
                 btnDownload.classList.remove("disabled-btn");
             } else {
@@ -919,14 +935,16 @@ function setDropZoneStatus(text, isError = false) {
 // Perform file upload POST request
 async function uploadExcelFile(file) {
     const ext = file.name.toLowerCase();
-    if (!ext.endsWith(".xlsx") && !ext.endsWith(".xls")) {
-        alert("HATA: Lütfen geçerli bir Excel dosyası (.xlsx veya .xls) yükleyin.");
-        addTerminalLine("HATA: Lütfen geçerli bir Excel dosyası (.xlsx veya .xls) yükleyin.", "error");
+    if (!ext.endsWith(".xlsx")) {
+        alert("HATA: Sadece .xlsx uzantılı modern Excel dosyaları desteklenmektedir.\n\nEğer dosyanız eski .xls formatındaysa, lütfen Microsoft Excel ile açıp sol üstten 'Dosya -> Farklı Kaydet' seçeneğini seçin. Dosya türünü 'Excel Çalışma Kitabı (*.xlsx)' olarak değiştirip kaydedin ve yeni .xlsx dosyasını buraya yükleyin.");
+        addTerminalLine("HATA: .xls formatı desteklenmemektedir. Lütfen .xlsx formatına çevirip tekrar deneyin.", "error");
+        fileInput.value = "";
         return;
     }
     
     addTerminalLine(`[SİSTEM] Excel dosyası yükleniyor: ${file.name}...`, "system");
     setDropZoneStatus(`YÜKLENİYOR: ${file.name.toUpperCase()}...`, false);
+    dropZone.classList.add("upload-loading");
     
     const formData = new FormData();
     formData.append("file", file);
@@ -938,6 +956,8 @@ async function uploadExcelFile(file) {
         });
         const json = await res.json();
         
+        dropZone.classList.remove("upload-loading");
+        
         if (json.success) {
             // Reset queries session
             queryStatus = {};
@@ -948,7 +968,7 @@ async function uploadExcelFile(file) {
             activeFaturaColIdx = json.fatura_col_idx || 1;
             activeFirmaColIdx = json.firma_col_idx || 3;
             
-            const activeFile = json.active_file || "EXPORT.XLSX";
+            const activeFile = cleanFileName(json.active_file) || "EXPORT.XLSX";
             activeFileBadge.innerText = `Aktif Dosya: ${activeFile}`;
             activeFileBadge.className = "active-file-text loaded";
             btnDownload.classList.remove("disabled-btn");
@@ -973,6 +993,7 @@ async function uploadExcelFile(file) {
             setTimeout(() => dropZone.classList.remove("upload-fail"), 1500);
         }
     } catch (e) {
+        dropZone.classList.remove("upload-loading");
         setDropZoneStatus("SUNUCU BAĞLANTI HATASI! Tekrar Deneyin.", true);
         alert("Sunucu Bağlantı Hatası:\n" + e.message);
         addTerminalLine("HATA: Sunucuya bağlanırken hata oluştu: " + e.message, "error");
@@ -980,6 +1001,8 @@ async function uploadExcelFile(file) {
         soundEngine.playError();
         dropZone.classList.add("upload-fail");
         setTimeout(() => dropZone.classList.remove("upload-fail"), 1500);
+    } finally {
+        fileInput.value = ""; // Always reset file input value to allow re-upload of the same file
     }
 }
 
@@ -1223,48 +1246,20 @@ function animateCounter(element, targetValue) {
     // Ensure targetValue is a valid non-negative integer
     targetValue = Math.max(0, Math.round(targetValue)) || 0;
     
-    const duration = 500;
-    
     // Cancel any ongoing animation for this element
     if (element._animId) {
         cancelAnimationFrame(element._animId);
         element._animId = null;
     }
     
-    // Initialize _currentValue from the stored property, NOT from textContent
-    if (typeof element._currentValue !== 'number' || isNaN(element._currentValue) || element._currentValue < 0) {
-        element._currentValue = 0;
-    }
+    const previousValue = element._currentValue || 0;
     
-    const start = element._currentValue;
-    
-    // If already at target, just set and return
-    if (start === targetValue) {
-        element.textContent = targetValue;
-        element._currentValue = targetValue;
-        return;
-    }
-    
-    const startTime = performance.now();
-    function update(currentTime) {
-        const elapsed = currentTime - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        const eased = 1 - Math.pow(1 - progress, 3); // easeOutCubic
-        const current = Math.round(start + (targetValue - start) * eased);
-        element.textContent = Math.max(0, current);
-        element._currentValue = current; // Keep _currentValue in sync with textContent!
-        if (progress < 1) {
-            element._animId = requestAnimationFrame(update);
-        } else {
-            element.textContent = targetValue;
-            element._currentValue = targetValue;
-            element._animId = null;
-        }
-    }
-    element._animId = requestAnimationFrame(update);
+    // Set value IMMEDIATELY (no animation delay) for perfect sync
+    element.textContent = targetValue;
+    element._currentValue = targetValue;
     
     // Pulse card animation (only if value actually changed)
-    if (start !== targetValue) {
+    if (previousValue !== targetValue) {
         const card = element.closest(".stat-card");
         if (card) {
             card.classList.remove("stat-card-pulse");
