@@ -655,7 +655,7 @@ async def run_scraper_task(session_id: str, websocket: WebSocket, rows_to_query:
                 time.sleep(delay)
             return
 
-        num_workers = 3
+        num_workers = 8
         ws_log(f"[SİSTEM] {num_workers} paralel sorgu işçisi başlatılıyor...")
         
         # Track states and scheduling times
