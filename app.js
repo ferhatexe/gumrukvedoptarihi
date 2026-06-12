@@ -225,6 +225,7 @@ const statCompleted = document.getElementById("stat-completed");
 const statPending = document.getElementById("stat-pending");
 const statNotClosed = document.getElementById("stat-not-closed");
 const statErrors = document.getElementById("stat-errors");
+const statCooldown = document.getElementById("stat-cooldown");
 const btnStart = document.getElementById("btn-start");
 const btnStop = document.getElementById("btn-stop");
 const btnDownload = document.getElementById("btn-download");
@@ -271,8 +272,14 @@ document.addEventListener("DOMContentLoaded", () => {
         terminal.innerHTML = '<div class="terminal-line system">[SİSTEM] Terminal temizlendi.</div>';
     });
     searchInput.addEventListener("input", filterTable);
-    document.getElementById("filter-status").addEventListener("change", filterTable);
-    document.getElementById("filter-type").addEventListener("change", filterTable);
+    document.getElementById("filter-status").addEventListener("change", function() {
+        this.classList.toggle("filter-active", this.value !== "all");
+        filterTable();
+    });
+    document.getElementById("filter-type").addEventListener("change", function() {
+        this.classList.toggle("filter-active", this.value !== "all");
+        filterTable();
+    });
     
     // Input mode switching (Excel Upload / Serbest Metin)
     const btnModeExcel = document.getElementById("btn-mode-excel");
@@ -1030,12 +1037,14 @@ function updateStats() {
     let uniquePending = 0;
     let uniqueNotClosed = 0;
     let uniqueErrors = 0;
+    let uniqueCooldown = 0;
     
     let rowTotal = allRows.length;
     let rowCompleted = 0;
     let rowPending = 0;
     let rowNotClosed = 0;
     let rowErrors = 0;
+    let rowCooldown = 0;
     
     for (const gcb in gcbGroups) {
         uniqueTotal++;
@@ -1048,6 +1057,8 @@ function updateStats() {
             uniqueNotClosed++;
         } else if (status === "Başarısız" || status === "Hatalı") {
             uniqueErrors++;
+        } else if (status === "Soğumada") {
+            uniqueCooldown++;
         } else {
             uniquePending++;
         }
@@ -1070,6 +1081,8 @@ function updateStats() {
                 rowNotClosed++;
             } else if (rowStatus === "Başarısız" || rowStatus === "Hatalı") {
                 rowErrors++;
+            } else if (rowStatus === "Soğumada") {
+                rowCooldown++;
             } else {
                 rowPending++;
             }
@@ -1082,6 +1095,7 @@ function updateStats() {
     if (statPending) animateCounter(statPending, uniquePending);
     if (statNotClosed) animateCounter(statNotClosed, uniqueNotClosed);
     if (statErrors) animateCounter(statErrors, uniqueErrors);
+    if (statCooldown) animateCounter(statCooldown, uniqueCooldown);
     
     // Update subtitle elements
     updateSubtitle("stat-total-rows", rowTotal);
@@ -1089,6 +1103,7 @@ function updateStats() {
     updateSubtitle("stat-pending-rows", rowPending);
     updateSubtitle("stat-not-closed-rows", rowNotClosed);
     updateSubtitle("stat-errors-rows", rowErrors);
+    updateSubtitle("stat-cooldown-rows", rowCooldown);
     
     if (allRows.length === 0) {
         btnStart.setAttribute("disabled", "true");
@@ -1294,11 +1309,15 @@ function filterTable() {
         }
         const matchesStatus = statusFilter === "all" || state.status === statusFilter;
         
-        // 3. Type (ETGB vs Beyanname) Filter
-        const isETGB = item.gcb && item.gcb.trim().length === 16;
+        // 3. Type (İhracat / İthalat / ETGB) Filter
+        const gcbStr = (item.gcb || "").trim().toUpperCase();
+        const isETGB = gcbStr.length === 16;
+        const isIthalat = !isETGB && gcbStr.length >= 18 && gcbStr.substring(8, 10) === "IM";
+        const isIhracat = !isETGB && !isIthalat;
         const matchesType = typeFilter === "all" || (
             (typeFilter === "etgb" && isETGB) ||
-            (typeFilter === "beyanname" && !isETGB)
+            (typeFilter === "ithalat" && isIthalat) ||
+            (typeFilter === "ihracat" && isIhracat)
         );
         
         return matchesQuery && matchesStatus && matchesType;
@@ -1316,7 +1335,7 @@ function resetExcelTable() {
         progressPercent.innerText = "0%";
         
         // Reset stat card animation state
-        [statTotal, statCompleted, statPending, statNotClosed, statErrors].forEach(el => {
+        [statTotal, statCompleted, statPending, statNotClosed, statErrors, statCooldown].forEach(el => {
             if (el) {
                 el._currentValue = 0;
                 el.textContent = "0";
