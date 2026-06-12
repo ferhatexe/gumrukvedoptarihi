@@ -410,6 +410,8 @@ class HttpCustomsScraper:
             durum_upper = durum_val.upper()
             if 'KAPANMAMIŞ' in durum_upper or 'KAPANMAMI' in durum_upper:
                 return {"success": True, "status": "Kapanmamış", "message": "Beyanname kapanmamış.", "date": None}
+            if any(kw in durum_upper for kw in ['BULUNAMAD', 'GECERSID', 'GECERSIS', 'GEÇERSİZ', 'BULUNAMADI', 'YOK', 'TESCİL', 'TESCIL', 'KRİTER']):
+                return {"success": False, "status": "Sistem Uyarısı", "message": durum_val, "date": None}
             date_match = re.search(r'(\d{2})\.(\d{2})\.(\d{4})', durum_val)
             if date_match:
                 d, m, y = date_match.group(1), date_match.group(2), date_match.group(3)
