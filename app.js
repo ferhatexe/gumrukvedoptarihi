@@ -775,8 +775,25 @@ function renderTable(rows) {
         
         const isCompleted = state.status === "İntaç Tarihi Var";
         const cooldown = getCooldownRemaining(item.gcb);
-        const isETGB = item.gcb && item.gcb.trim().length === 16;
-        const etgbBadge = isETGB ? ' <span class="tag-etgb">ETGB</span>' : '';
+        const gcbStr = (item.gcb || "").trim().toUpperCase();
+        const isETGB = gcbStr.length === 16;
+        let typeBadge = "";
+        if (isETGB) {
+            typeBadge = ' <span class="tag-etgb">ETGB</span>';
+        } else if (gcbStr.length >= 18) {
+            const typeCode = gcbStr.substring(8, 10);
+            if (typeCode === "EX") {
+                typeBadge = ' <span class="tag-ihracat">EX</span>';
+            } else if (typeCode === "IM") {
+                typeBadge = ' <span class="tag-ithalat">IM</span>';
+            } else if (typeCode === "AN") {
+                typeBadge = ' <span class="tag-antrepo">AN</span>';
+            } else if (typeCode === "TR") {
+                typeBadge = ' <span class="tag-transit">TR</span>';
+            } else if (typeCode === "EU") {
+                typeBadge = ' <span class="tag-transit-eu">EU</span>';
+            }
+        }
         
         let actionBtn = "";
         if (isCompleted) {
@@ -809,7 +826,7 @@ function renderTable(rows) {
                 const isAnyDateCol = headerName.includes("tarih") || headerName.includes("date");
                 
                 if (isGcbCol) {
-                    rowHtml += `<td class="font-mono"><strong>${val || "-"}</strong>${etgbBadge}</td>`;
+                    rowHtml += `<td class="font-mono"><strong>${val || "-"}</strong>${typeBadge}</td>`;
                 } else if (isDateCol) {
                     rowHtml += `<td id="date-${item.row}" class="font-mono">${formatDate(state.intac || val) || "-"}</td>`;
                 } else if (isAnyDateCol) {
@@ -826,7 +843,7 @@ function renderTable(rows) {
             // Fallback to static columns if row values array is missing
             rowHtml += `<td class="font-mono">${item.fatura || "-"}</td>`;
             rowHtml += `<td title="${item.firma}">${item.firma ? truncate(item.firma, 35) : "-"}</td>`;
-            rowHtml += `<td class="font-mono"><strong>${item.gcb || "-"}</strong>${etgbBadge}</td>`;
+            rowHtml += `<td class="font-mono"><strong>${item.gcb || "-"}</strong>${typeBadge}</td>`;
             rowHtml += `<td id="date-${item.row}" class="font-mono">${formatDate(state.intac) || "-"}</td>`;
         }
         
@@ -1309,17 +1326,21 @@ function filterTable() {
         }
         const matchesStatus = statusFilter === "all" || state.status === statusFilter;
         
-        // 3. Type (İhracat / İthalat / Antrepo / ETGB) Filter
+        // 3. Type (İhracat / İthalat / Antrepo / Transit / Ortak Transit / ETGB) Filter
         const gcbStr = (item.gcb || "").trim().toUpperCase();
         const isETGB = gcbStr.length === 16;
         const typeCode = (!isETGB && gcbStr.length >= 18) ? gcbStr.substring(8, 10) : "";
         const isIthalat = typeCode === "IM";
         const isAntrepo = typeCode === "AN";
-        const isIhracat = !isETGB && !isIthalat && !isAntrepo;
+        const isTransit = typeCode === "TR";
+        const isTransitEU = typeCode === "EU";
+        const isIhracat = typeCode === "EX" || (!isETGB && !isIthalat && !isAntrepo && !isTransit && !isTransitEU);
         const matchesType = typeFilter === "all" || (
             (typeFilter === "etgb" && isETGB) ||
             (typeFilter === "ithalat" && isIthalat) ||
             (typeFilter === "antrepo" && isAntrepo) ||
+            (typeFilter === "transit" && isTransit) ||
+            (typeFilter === "transit_eu" && isTransitEU) ||
             (typeFilter === "ihracat" && isIhracat)
         );
         

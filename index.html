@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=4.0">
+    <link rel="stylesheet" href="style.css?v=4.1">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23E53E3E'/%3E%3Cstop offset='100%25' stop-color='%239B2C2C'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' rx='22' fill='url(%23g)'/%3E%3Cpath d='M30 25h30l15 15v35c0 3-2 5-5 5H30c-3 0-5-2-5-5V30c0-3 2-5 5-5z' fill='%23FFFFFF'/%3E%3Cpath d='M60 25v15h15' fill='none' stroke='%23E53E3E' stroke-width='4'/%3E%3Cpath d='M38 52l6 6 18-18' fill='none' stroke='%23E53E3E' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -328,9 +328,11 @@
                         </select>
                         <select id="filter-type" class="filter-select">
                             <option value="all">TÜR: TÜMÜ</option>
-                            <option value="ihracat">İHRACAT</option>
-                            <option value="ithalat">İTHALAT</option>
-                            <option value="antrepo">ANTREPO</option>
+                            <option value="ihracat">İHRACAT (EX)</option>
+                            <option value="ithalat">İTHALAT (IM)</option>
+                            <option value="antrepo">ANTREPO (AN)</option>
+                            <option value="transit">TRANSİT (TR)</option>
+                            <option value="transit_eu">ORTAK TRANSİT (EU)</option>
                             <option value="etgb">ETGB</option>
                         </select>
                         <div class="search-box">
@@ -523,6 +525,6 @@
         </div>
     </div>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=4.1"></script>
 </body>
 </html>

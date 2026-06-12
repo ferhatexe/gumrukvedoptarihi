@@ -1805,6 +1805,43 @@ body {
     vertical-align: middle;
 }
 
+.tag-ihracat, .tag-ithalat, .tag-antrepo, .tag-transit, .tag-transit-eu {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.62rem;
+    font-weight: 800;
+    padding: 0.12rem 0.4rem;
+    border-radius: 4px;
+    margin-left: 0.4rem;
+    vertical-align: middle;
+    text-transform: uppercase;
+}
+.tag-ihracat {
+    background: var(--blue-bg);
+    color: var(--blue-text);
+    border: 1px solid var(--blue-border);
+}
+.tag-ithalat {
+    background: var(--emerald-bg);
+    color: var(--emerald-text);
+    border: 1px solid var(--emerald-border);
+}
+.tag-antrepo {
+    background: var(--amber-bg);
+    color: var(--amber-text);
+    border: 1px solid var(--amber-border);
+}
+.tag-transit {
+    background: #faf5ff;
+    color: #6b21a8;
+    border: 1px solid #e9d5ff;
+}
+.tag-transit-eu {
+    background: #eef2ff;
+    color: #3730a3;
+    border: 1px solid #c7d2fe;
+}
+
 .btn-inline {
     padding: 0.4rem 0.9rem;
     font-size: 0.72rem;
