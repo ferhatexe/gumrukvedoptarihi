@@ -1309,14 +1309,17 @@ function filterTable() {
         }
         const matchesStatus = statusFilter === "all" || state.status === statusFilter;
         
-        // 3. Type (İhracat / İthalat / ETGB) Filter
+        // 3. Type (İhracat / İthalat / Antrepo / ETGB) Filter
         const gcbStr = (item.gcb || "").trim().toUpperCase();
         const isETGB = gcbStr.length === 16;
-        const isIthalat = !isETGB && gcbStr.length >= 18 && gcbStr.substring(8, 10) === "IM";
-        const isIhracat = !isETGB && !isIthalat;
+        const typeCode = (!isETGB && gcbStr.length >= 18) ? gcbStr.substring(8, 10) : "";
+        const isIthalat = typeCode === "IM";
+        const isAntrepo = typeCode === "AN";
+        const isIhracat = !isETGB && !isIthalat && !isAntrepo;
         const matchesType = typeFilter === "all" || (
             (typeFilter === "etgb" && isETGB) ||
             (typeFilter === "ithalat" && isIthalat) ||
+            (typeFilter === "antrepo" && isAntrepo) ||
             (typeFilter === "ihracat" && isIhracat)
         );
         
