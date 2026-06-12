@@ -473,6 +473,8 @@ class HttpCustomsScraper:
         # Safety limit: consecutive NON-captcha errors only
         max_consecutive_errors = 50
         consecutive_errors = 0
+        max_empty_errors = 3
+        empty_errors = 0
         attempt = 0
 
         while True:
@@ -545,6 +547,7 @@ class HttpCustomsScraper:
                     if attempt <= 3 or attempt % 5 == 0:
                         self.log(f"[{gcb_no}] Deneme {attempt}: Güvenlik kodu yanlış ('{ocr_text}' -> {solution})")
                     consecutive_errors = 0  # Reset: server responded fine, just wrong captcha
+                    empty_errors = 0
                     import random
                     time.sleep(0.1 + random.random() * 0.3)
                     continue
@@ -560,6 +563,14 @@ class HttpCustomsScraper:
 
                 # Non-finalized results (Tarih Okunamadı, Bilinmeyen etc.)
                 consecutive_errors += 1
+                empty_errors += 1
+                if empty_errors >= max_empty_errors:
+                    return {
+                        "success": False,
+                        "status": "Sistem Uyarısı",
+                        "message": "Gümrük portalından yanıt alınamadı (Geçersiz beyanname veya sunucu yanıt vermiyor).",
+                        "date": None
+                    }
                 self.log(f"[{gcb_no}] Deneme {attempt}: {result.get('status', '?')}: {result.get('message', '?')} — tekrar deneniyor...")
                 if self._interruptible_sleep(2):
                     return {"success": False, "status": "İptal", "message": "Durduruldu.", "date": None}

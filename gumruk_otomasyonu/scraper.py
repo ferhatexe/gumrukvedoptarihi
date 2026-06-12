@@ -475,6 +475,8 @@ class HttpCustomsScraper:
         gcb_no = gcb_no.strip().upper()
         is_etgb = len(gcb_no) == 16
         attempt = 0
+        max_empty_errors = 3
+        empty_errors = 0
 
         while True:
             attempt += 1
@@ -528,6 +530,7 @@ class HttpCustomsScraper:
                 # ── Retryable results: keep going ──
                 if result['status'] == 'CaptchaWrong':
                     self.log(f"[{gcb_no}] Deneme {attempt}: Güvenlik kodu yanlış ('{ocr_text}' -> {solution})")
+                    empty_errors = 0
                     import random
                     time.sleep(0.2 + random.random() * 0.8)
                     continue
@@ -538,6 +541,14 @@ class HttpCustomsScraper:
 
                 # Non-finalized results (Tarih Okunamadı, Sistem Uyarısı, Bilinmeyen etc.)
                 # Log and retry
+                empty_errors += 1
+                if empty_errors >= max_empty_errors:
+                    return {
+                        "success": False,
+                        "status": "Sistem Uyarısı",
+                        "message": "Gümrük portalından yanıt alınamadı (Geçersiz beyanname veya sunucu yanıt vermiyor).",
+                        "date": None
+                    }
                 self.log(f"[{gcb_no}] Deneme {attempt}: {result.get('status', '?')}: {result.get('message', '?')} — tekrar deneniyor...")
                 if self._interruptible_sleep(2):
                     return {"success": False, "status": "İptal", "message": "Durduruldu.", "date": None}
