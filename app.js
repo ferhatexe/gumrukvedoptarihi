@@ -155,6 +155,8 @@ const STATUS_PRIORITY = {
     "Sorgulanıyor...": 5,
     "Başarısız": 4,
     "Hatalı": 4,
+    "Beyan No Hatalı": 4,
+    "Sistem Uyarısı": 4,
     "Bekliyor": 2
 };
 
@@ -583,6 +585,27 @@ function handleWebSocketMessage(msg) {
                 allRows[cacheRowIdxFail].status = "Başarısız";
             }
             updateRowUIStatus(msg.row, "Başarısız", "badge-fail", null, msg.gcb);
+            updateStats();
+            
+            if (searchInput.value.trim() !== "" || document.getElementById("filter-status").value !== "all" || document.getElementById("filter-type").value !== "all") {
+                filterTable();
+            }
+            break;
+            
+        case "row_invalid_gcb":
+            queryStatus[msg.row] = { intac: "Beyan No Hatalı", status: "Hatalı" };
+            addTerminalLine(`[GEÇERSİZ BEYAN] Satır ${msg.row} (${msg.gcb}): Beyan No Hatalı! ${msg.message}`, "error");
+            soundEngine.playError();
+            
+            lastUpdatedRow = msg.row;
+            lastUpdatedTime = Date.now();
+            
+            const cacheRowIdxInvalid = allRows.findIndex(r => Number(r.row) === Number(msg.row));
+            if (cacheRowIdxInvalid !== -1) {
+                allRows[cacheRowIdxInvalid].status = "Hatalı";
+                allRows[cacheRowIdxInvalid].intac = "Beyan No Hatalı";
+            }
+            updateRowUIStatus(msg.row, "Hatalı", "badge-fail", "Beyan No Hatalı", msg.gcb);
             updateStats();
             
             if (searchInput.value.trim() !== "" || document.getElementById("filter-status").value !== "all" || document.getElementById("filter-type").value !== "all") {
@@ -1072,7 +1095,7 @@ function updateStats() {
             uniqueCompleted++;
         } else if (status === "Kapanmamış") {
             uniqueNotClosed++;
-        } else if (status === "Başarısız" || status === "Hatalı") {
+        } else if (status === "Başarısız" || status === "Hatalı" || status === "Beyan No Hatalı") {
             uniqueErrors++;
         } else if (status === "Soğumada") {
             uniqueCooldown++;
@@ -1096,7 +1119,7 @@ function updateStats() {
                 rowCompleted++;
             } else if (rowStatus === "Kapanmamış") {
                 rowNotClosed++;
-            } else if (rowStatus === "Başarısız" || rowStatus === "Hatalı") {
+            } else if (rowStatus === "Başarısız" || rowStatus === "Hatalı" || rowStatus === "Beyan No Hatalı") {
                 rowErrors++;
             } else if (rowStatus === "Soğumada") {
                 rowCooldown++;
@@ -1324,7 +1347,9 @@ function filterTable() {
         } else {
             state = { intac: item.intac, status: item.status };
         }
-        const matchesStatus = statusFilter === "all" || state.status === statusFilter;
+        const matchesStatus = statusFilter === "all" || 
+            (statusFilter === "Hatalı" && (state.status === "Hatalı" || state.status === "Beyan No Hatalı" || state.status === "Sistem Uyarısı")) ||
+            state.status === statusFilter;
         
         // 3. Type (İhracat / İthalat / Antrepo / Transit / Ortak Transit / ETGB) Filter
         const gcbStr = (item.gcb || "").trim().toUpperCase();

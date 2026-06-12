@@ -620,6 +620,16 @@ async def run_scraper_task(session_id: str, websocket: WebSocket, rows_to_query:
                         ws_send({"type": "row_fail", "row": row_idx, "gcb": gcb_no, "message": f"Excel yazma hatası: {str(e)}"})
                 elif (result.get("success") and result.get("status") == "Kapanmamış") or result.get("status") == "RateLimit":
                     ws_send({"type": "row_not_closed", "row": row_idx, "gcb": gcb_no, "message": result.get("message", "Beyanname kapanmamış.")})
+                elif result.get("status") == "Sistem Uyarısı":
+                    try:
+                        with excel_lock:
+                            cell = ws.cell(row=row_idx, column=session.date_col_idx, value="Beyan No Hatalı")
+                            cell.number_format = '@'  # Text format
+                            apply_table_formatting_to_sheet(ws)
+                            wb.save(excel_path)
+                        ws_send({"type": "row_invalid_gcb", "row": row_idx, "gcb": gcb_no, "message": result.get("message", "Beyanname bulunamadı.")})
+                    except Exception as e:
+                        ws_send({"type": "row_fail", "row": row_idx, "gcb": gcb_no, "message": f"Excel yazma hatası: {str(e)}"})
                 else:
                     ws_send({"type": "row_fail", "row": row_idx, "gcb": gcb_no, "message": result.get("message", "Sorgulama hatası.")})
                 
