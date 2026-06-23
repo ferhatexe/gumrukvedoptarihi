@@ -4,6 +4,8 @@ import json
 import asyncio
 import threading
 import time
+import shutil
+import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, date
 from typing import List, Dict, Any
@@ -18,12 +20,59 @@ import openpyxl
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Alignment
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, File, UploadFile
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, File, UploadFile, Form
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 
 from scraper import HttpCustomsScraper
 
 app = FastAPI(title="Gümrük Beyanname Sorgulama Otomasyonu")
+
+@app.on_event("startup")
+async def startup_cleanup():
+    try:
+        for item in os.listdir(BASE_DIR):
+            item_path = os.path.join(BASE_DIR, item)
+            if item.startswith("temp_") and os.path.isdir(item_path):
+                shutil.rmtree(item_path, ignore_errors=True)
+            elif item.startswith("merged_") and item.endswith(".zip") and os.path.isfile(item_path):
+                try:
+                    os.remove(item_path)
+                except Exception:
+                    pass
+    except Exception as e:
+        print(f"Startup cleanup warning: {e}")
+
+def match_beyan_filename(gcb: str, filename: str) -> bool:
+    if not filename.lower().endswith(".pdf"):
+        return False
+    gcb_upper = gcb.strip().upper()
+    file_upper = filename.upper()
+    name_without_ext = file_upper[:-4] # removes '.PDF'
+    
+    if name_without_ext == gcb_upper:
+        return True
+    if name_without_ext == f"{gcb_upper}_BEYANNAME":
+        return True
+    if gcb_upper in name_without_ext:
+        return True
+    return False
+
+def match_fatura_filename(fat_no: str, filename: str) -> bool:
+    if not filename.lower().endswith(".pdf"):
+        return False
+    fat_upper = fat_no.strip().upper()
+    file_upper = filename.upper()
+    
+    if fat_upper in file_upper:
+        return True
+    match = re.search(r'([A-Z0-9]{3}\d{13})', filename, re.IGNORECASE)
+    if match and match.group(1).upper() == fat_upper:
+        return True
+    match_old = re.search(r'_(BT[C]?\d+?)005056', filename, re.IGNORECASE)
+    if match_old and match_old.group(1).upper() == fat_upper:
+        return True
+    return False
+
 
 # Excel Paths
 LOCAL_BASE_DIR = r"c:\WORK\00_INBOX\MAYIS BEYANLAR\MAYIS BEYANLAR"
@@ -245,26 +294,70 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
         h = str(ws.cell(row=1, column=c).value or "").strip()
         headers.append(h)
         
-    # Detect dynamic columns based on keywords
+    # Detect dynamic columns based on keywords with priority scoring to avoid wrong columns overwriting good ones
     gcb_found = False
     date_found = False
     fatura_found = False
     firma_found = False
     
+    fatura_score = 0
+    gcb_score = 0
+    firma_score = 0
+    date_score = 0
+    
     for idx, h in enumerate(headers, 1):
         hl = normalize_turkish(h)
+        
+        # 1. Beyanname / GCB No
         if any(k in hl for k in ["beyanname", "gb no", "gb numara", "gcb", "güb", "gub", "gçb", "gcb no", "gçb no", "beyan no", "tescil no"]) and not any(k in hl for k in ["tarih", "date"]):
-            gcb_col_idx = idx
-            gcb_found = True
+            score = 1
+            if any(k in hl for k in ["gb no", "gcb no", "gb numarasi", "beyanname no", "gçb no"]):
+                score = 3
+            elif any(k in hl for k in ["gcb", "gçb", "beyanname"]):
+                score = 2
+            
+            if score > gcb_score:
+                gcb_col_idx = idx
+                gcb_score = score
+                gcb_found = True
+                
+        # 2. İntaç Tarihi
         elif any(k in hl for k in ["intaç", "kapanma", "intac", "kapanış", "kapanis"]):
-            date_col_idx = idx
-            date_found = True
-        elif any(k in hl for k in ["fatura", "invoice", "fatura no"]):
-            fatura_col_idx = idx
-            fatura_found = True
+            score = 1
+            if any(k in hl for k in ["gumruk intac", "intaç tarihi", "intac tarihi", "kapanis tarihi"]):
+                score = 2
+            if score > date_score:
+                date_col_idx = idx
+                date_score = score
+                date_found = True
+                
+        # 3. Fatura No (Highest priority for e-arşiv, e-fatura)
+        elif any(k in hl for k in ["fatura", "invoice"]):
+            score = 0
+            if any(k in hl for k in ["e-arsiv", "e-arşiv", "e-fatura", "e-invoice"]):
+                score = 3
+            elif any(k in hl for k in ["fatura no", "invoice no", "fatura numarasi"]):
+                score = 2
+            elif not any(k in hl for k in ["ram", "kayit", "kayıt", "ic", "iç", "tutar", "tarih", "date"]):
+                score = 1
+                
+            if score > fatura_score:
+                fatura_col_idx = idx
+                fatura_score = score
+                fatura_found = True
+                
+        # 4. Firma Adı
         elif any(k in hl for k in ["firma", "ad 1", "müşteri", "alıcı", "unvan", "title", "company", "firma adi", "firma adı"]):
-            firma_col_idx = idx
-            firma_found = True
+            score = 1
+            if any(k in hl for k in ["firma adi", "firma adı", "unvan", "company name"]):
+                score = 3
+            elif any(k in hl for k in ["ad 1", "musteri", "alıcı"]):
+                score = 2
+                
+            if score > firma_score:
+                firma_col_idx = idx
+                firma_score = score
+                firma_found = True
 
     # If no İntaç Date column was found, automatically append it!
     if not date_found and file_path and os.path.exists(file_path):
@@ -518,6 +611,136 @@ def download_file(session_id: str = None):
         return FileResponse(session.active_excel_path, filename=filename, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     return JSONResponse(status_code=404, content={"success": False, "message": "Excel dosyası bulunamadı veya bağlantı kesildi."})
 
+@app.get("/api/merge/download")
+def download_merge_zip(session_id: str = None):
+    zip_path = os.path.join(BASE_DIR, f"merged_{session_id}.zip")
+    if os.path.exists(zip_path):
+        filename = "birlesmis_evraklar.zip"
+        return FileResponse(zip_path, filename=filename, media_type="application/zip")
+    return JSONResponse(status_code=404, content={"success": False, "message": "ZIP arşivi bulunamadı veya henüz oluşturulmadı."})
+
+@app.post("/api/merge/upload")
+async def upload_merge_files(
+    session_id: str = Form(...),
+    beyan_zip: UploadFile = File(...),
+    fatura_zip: UploadFile = File(...),
+    excel_file: UploadFile = File(...)
+):
+    session = get_session(session_id)
+    temp_dir = os.path.join(BASE_DIR, f"temp_{session_id}")
+    
+    # Clean up old temp directory for this session if it exists
+    if os.path.exists(temp_dir):
+        try:
+            shutil.rmtree(temp_dir)
+        except Exception:
+            pass
+            
+    # Create temp directory structure
+    beyan_extract_dir = os.path.join(temp_dir, "extracted_beyan")
+    fatura_extract_dir = os.path.join(temp_dir, "extracted_fatura")
+    output_dir = os.path.join(temp_dir, "output")
+    
+    os.makedirs(beyan_extract_dir, exist_ok=True)
+    os.makedirs(fatura_extract_dir, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
+    
+    try:
+        # Save and extract beyan_zip
+        beyan_zip_path = os.path.join(temp_dir, "beyan.zip")
+        with open(beyan_zip_path, "wb") as f:
+            content = await beyan_zip.read()
+            f.write(content)
+            
+        with zipfile.ZipFile(beyan_zip_path, 'r') as zip_ref:
+            for member in zip_ref.namelist():
+                filename = os.path.basename(member)
+                if not filename or not filename.endswith(".pdf") or filename.startswith(".") or filename.startswith("__"):
+                    continue
+                source = zip_ref.open(member)
+                target = open(os.path.join(beyan_extract_dir, filename), "wb")
+                with source, target:
+                    shutil.copyfileobj(source, target)
+                    
+        # Save and extract fatura_zip
+        fatura_zip_path = os.path.join(temp_dir, "fatura.zip")
+        with open(fatura_zip_path, "wb") as f:
+            content = await fatura_zip.read()
+            f.write(content)
+            
+        with zipfile.ZipFile(fatura_zip_path, 'r') as zip_ref:
+            for member in zip_ref.namelist():
+                filename = os.path.basename(member)
+                if not filename or not filename.endswith(".pdf") or filename.startswith(".") or filename.startswith("__"):
+                    continue
+                source = zip_ref.open(member)
+                target = open(os.path.join(fatura_extract_dir, filename), "wb")
+                with source, target:
+                    shutil.copyfileobj(source, target)
+                    
+        # Save excel_file
+        excel_path = os.path.join(temp_dir, excel_file.filename)
+        with open(excel_path, "wb") as f:
+            content = await excel_file.read()
+            f.write(content)
+            
+        session.active_excel_path = excel_path
+        
+        # Read Excel metadata to find dynamic column indices
+        res = read_excel_data(excel_path)
+        session.fatura_col_idx = res["fatura_col_idx"]
+        session.firma_col_idx = res["firma_col_idx"]
+        session.gcb_col_idx = res["gcb_col_idx"]
+        
+        # Run preview analysis using the extracted directories
+        preview_res = get_merge_preview(
+            session_id=session_id,
+            beyan_dir=beyan_extract_dir,
+            fatura_dir=fatura_extract_dir,
+            output_dir=output_dir
+        )
+        
+        # Add the absolute directory paths to response
+        preview_data = json.loads(preview_res.body.decode("utf-8"))
+        preview_data["beyan_dir"] = beyan_extract_dir
+        preview_data["fatura_dir"] = fatura_extract_dir
+        preview_data["output_dir"] = output_dir
+        preview_data["active_file"] = excel_file.filename
+        
+        return JSONResponse(content=preview_data)
+        
+    except Exception as e:
+        if os.path.exists(temp_dir):
+            try:
+                shutil.rmtree(temp_dir)
+            except Exception:
+                pass
+        return JSONResponse(status_code=500, content={"success": False, "message": f"Dosyalar yüklenirken veya açılırken hata: {str(e)}"})
+
+@app.get("/api/merge/cleanup")
+def cleanup_merge_files(session_id: str = None):
+    if not session_id:
+        return JSONResponse(status_code=400, content={"success": False, "message": "Session ID gerekli."})
+        
+    temp_dir = os.path.join(BASE_DIR, f"temp_{session_id}")
+    if os.path.exists(temp_dir):
+        try:
+            shutil.rmtree(temp_dir)
+        except Exception:
+            pass
+            
+    zip_path = os.path.join(BASE_DIR, f"merged_{session_id}.zip")
+    if os.path.exists(zip_path):
+        try:
+            os.remove(zip_path)
+        except Exception:
+            pass
+            
+    session = get_session(session_id)
+    session.active_excel_path = None
+    
+    return JSONResponse(content={"success": True, "message": "Oturum geçici dosyaları başarıyla temizlendi."})
+
 @app.get("/api/merge/preview")
 def get_merge_preview(session_id: str = None, beyan_dir: str = "", fatura_dir: str = "", output_dir: str = ""):
     session = get_session(session_id)
@@ -551,28 +774,6 @@ def get_merge_preview(session_id: str = None, beyan_dir: str = "", fatura_dir: s
                 gcb_groups[gcb]["faturalar"].append(fatura_no)
             gcb_groups[gcb]["firma"] = firma
             
-        # Index Beyanname PDF directory
-        beyanname_files = {}
-        for f in os.listdir(beyan_dir):
-            if f.endswith(".pdf"):
-                gcb_no = f.replace("_Beyanname.pdf", "").replace("_beyanname.pdf", "")
-                beyanname_files[gcb_no.upper()] = {
-                    "filename": f,
-                    "path": os.path.join(beyan_dir, f)
-                }
-                
-        # Index Fatura PDF directory
-        fatura_files = {}
-        for f in os.listdir(fatura_dir):
-            if f.endswith(".pdf"):
-                match = re.search(r'_(BT[C]?\d+?)005056', f, re.IGNORECASE)
-                if match:
-                    fatura_no = match.group(1).upper()
-                    fatura_files[fatura_no] = {
-                        "filename": f,
-                        "path": os.path.join(fatura_dir, f)
-                    }
-                    
         # Generate match preview list
         preview_data = []
         for gcb, info in sorted(gcb_groups.items()):
@@ -581,26 +782,41 @@ def get_merge_preview(session_id: str = None, beyan_dir: str = "", fatura_dir: s
             faturalar = info["faturalar"]
             
             # Check GCB PDF
-            gcb_pdf_found = gcb_upper in beyanname_files
+            gcb_pdf_found = False
+            gcb_pdf_filename = None
+            gcb_pdf_path = None
+            for f in os.listdir(beyan_dir):
+                if match_beyan_filename(gcb, f):
+                    gcb_pdf_found = True
+                    gcb_pdf_filename = f
+                    gcb_pdf_path = os.path.join(beyan_dir, f)
+                    break
+            
             gcb_pdf_info = {
                 "status": "found" if gcb_pdf_found else "missing",
-                "filename": beyanname_files[gcb_upper]["filename"] if gcb_pdf_found else None,
-                "path": beyanname_files[gcb_upper]["path"] if gcb_pdf_found else None
+                "filename": gcb_pdf_filename,
+                "path": gcb_pdf_path
             }
             
             # Check Fatura PDFs
             fatura_pdfs_list = []
             faturas_found_count = 0
             for fat in faturalar:
-                fat_upper = fat.upper()
-                found = fat_upper in fatura_files
-                if found:
-                    faturas_found_count += 1
+                fat_found = False
+                fat_filename = None
+                fat_path = None
+                for f in os.listdir(fatura_dir):
+                    if match_fatura_filename(fat, f):
+                        fat_found = True
+                        faturas_found_count += 1
+                        fat_filename = f
+                        fat_path = os.path.join(fatura_dir, f)
+                        break
                 fatura_pdfs_list.append({
                     "fatura_no": fat,
-                    "status": "found" if found else "missing",
-                    "filename": fatura_files[fat_upper]["filename"] if found else None,
-                    "path": fatura_files[fat_upper]["path"] if found else None
+                    "status": "found" if fat_found else "missing",
+                    "filename": fat_filename,
+                    "path": fat_path
                 })
                 
             # Status calculation
@@ -976,7 +1192,16 @@ async def run_pdf_merge_task(session_id: str, websocket: WebSocket, beyan_dir: s
     completed = 0
     success_count = 0
     fail_count = 0
+    created_files = []
     
+    # Remove old session zip if exists
+    old_zip = os.path.join(BASE_DIR, f"merged_{session_id}.zip")
+    if os.path.exists(old_zip):
+        try:
+            os.remove(old_zip)
+        except Exception:
+            pass
+            
     try:
         await websocket.send_json({"type": "merge_log", "message": f"[SİSTEM] {total} adet evrak birleştirme görevi başlatılıyor...", "level": "info"})
         
@@ -1009,11 +1234,9 @@ async def run_pdf_merge_task(session_id: str, websocket: WebSocket, beyan_dir: s
             beyan_path = None
             try:
                 for f in os.listdir(beyan_dir):
-                    if f.endswith(".pdf"):
-                        gcb_no = f.replace("_Beyanname.pdf", "").replace("_beyanname.pdf", "")
-                        if gcb_no.upper() == gcb.upper():
-                            beyan_path = os.path.join(beyan_dir, f)
-                            break
+                    if match_beyan_filename(gcb, f):
+                        beyan_path = os.path.join(beyan_dir, f)
+                        break
             except Exception as le:
                 await websocket.send_json({"type": "merge_log", "message": f"[{gcb}] HATA: Beyanname klasörü okunamadı: {str(le)}", "level": "error"})
                 await websocket.send_json({"type": "merge_item_complete", "gcb": gcb, "status": "fail", "message": "Dizin okuma hatası."})
@@ -1035,14 +1258,11 @@ async def run_pdf_merge_task(session_id: str, websocket: WebSocket, beyan_dir: s
             missing_invoices = []
             try:
                 for fat in faturalar:
-                    fat_upper = fat.upper()
                     found_path = None
                     for f in os.listdir(fatura_dir):
-                        if f.endswith(".pdf"):
-                            match = re.search(r'_(BT[C]?\d+?)005056', f, re.IGNORECASE)
-                            if match and match.group(1).upper() == fat_upper:
-                                found_path = os.path.join(fatura_dir, f)
-                                break
+                        if match_fatura_filename(fat, f):
+                            found_path = os.path.join(fatura_dir, f)
+                            break
                     if found_path:
                         fatura_paths.append(found_path)
                     else:
@@ -1087,6 +1307,7 @@ async def run_pdf_merge_task(session_id: str, websocket: WebSocket, beyan_dir: s
                     "level": "success"
                 })
                 await websocket.send_json({"type": "merge_item_complete", "gcb": gcb, "status": "success", "output_name": target_filename})
+                created_files.append(output_path)
                 success_count += 1
             except Exception as e:
                 await websocket.send_json({
@@ -1101,15 +1322,35 @@ async def run_pdf_merge_task(session_id: str, websocket: WebSocket, beyan_dir: s
             await websocket.send_json({"type": "merge_progress", "completed": completed, "total": total})
             await asyncio.sleep(0.05)
             
+        # Zip successfully merged documents
+        zip_url = None
+        if success_count > 0:
+            await websocket.send_json({"type": "merge_log", "message": "[SİSTEM] Başarıyla birleştirilen belgeler ZIP arşivine sıkıştırılıyor...", "level": "info"})
+            try:
+                import zipfile
+                def create_zip(z_path, files):
+                    with zipfile.ZipFile(z_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                        for fp in files:
+                            if os.path.exists(fp):
+                                zipf.write(fp, os.path.basename(fp))
+                
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, create_zip, old_zip, created_files)
+                zip_url = f"/api/merge/download?session_id={session_id}"
+                await websocket.send_json({"type": "merge_log", "message": "[SİSTEM] ZIP arşivi hazırlandı.", "level": "success"})
+            except Exception as ze:
+                await websocket.send_json({"type": "merge_log", "message": f"[UYARI] ZIP oluşturulamadı: {str(ze)}", "level": "warning"})
+                
         await websocket.send_json({
             "type": "merge_finished",
             "success_count": success_count,
-            "fail_count": fail_count
+            "fail_count": fail_count,
+            "zip_url": zip_url
         })
     except Exception as ge:
         try:
             await websocket.send_json({"type": "merge_log", "message": f"[HATA] Beklenmeyen sistem hatası: {str(ge)}", "level": "error"})
-            await websocket.send_json({"type": "merge_finished", "success_count": success_count, "fail_count": fail_count + (total - completed)})
+            await websocket.send_json({"type": "merge_finished", "success_count": success_count, "fail_count": fail_count + (total - completed), "zip_url": None})
         except Exception:
             pass
     finally:

@@ -211,6 +211,21 @@ body {
     box-shadow: 0 2px 8px rgba(16, 185, 129, 0.05);
 }
 
+@media (min-width: 769px) {
+    .logo-area {
+        flex: 1;
+        display: flex;
+        justify-content: flex-start;
+        align-items: center;
+    }
+    .status-area {
+        flex: 1;
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+    }
+}
+
 .active-file-text.loaded:hover {
     border-color: rgba(16, 185, 129, 0.5);
     box-shadow: 0 4px 12px rgba(16, 185, 129, 0.12);
@@ -514,7 +529,7 @@ body {
    ============================================================ */
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 1.25rem;
 }
 
@@ -801,6 +816,7 @@ body {
     display: flex;
     gap: 0.75rem;
     flex-wrap: wrap;
+    flex-shrink: 0;
 }
 
 /* BUTTONS STYLE (PREMIUM, DYNAMIC SHADOWS, ROUNDED) */
@@ -822,6 +838,7 @@ body {
     position: relative;
     overflow: hidden;
     isolation: isolate;
+    flex-shrink: 0;
 }
 
 /* Subtle shimmer overlay on hover */
@@ -1074,7 +1091,7 @@ body {
     gap: 0.25rem;
 }
 
-.tab-btn {
+.panel-tab-btn {
     flex: 1;
     padding: 0.85rem;
     background: transparent;
@@ -1102,21 +1119,21 @@ body {
     filter: drop-shadow(0 1px 1px rgba(0,0,0,0.05));
 }
 
-.tab-btn:hover {
+.panel-tab-btn:hover {
     color: var(--text-primary);
     background: rgba(255, 255, 255, 0.5);
 }
-.tab-btn:hover .tab-icon-svg {
+.panel-tab-btn:hover .tab-icon-svg {
     color: var(--text-primary);
     transform: translateY(-2px) scale(1.1);
 }
 
-.tab-btn.active {
+.panel-tab-btn.active {
     color: var(--accent-red);
     background: var(--bg-surface);
     box-shadow: 0 -2px 12px rgba(213, 43, 30, 0.04), inset 0 -2px 0 var(--accent-red);
 }
-.tab-btn.active .tab-icon-svg {
+.panel-tab-btn.active .tab-icon-svg {
     color: var(--accent-red);
     filter: drop-shadow(0 1px 3px rgba(213, 43, 30, 0.25));
 }
@@ -1127,13 +1144,13 @@ body {
     height: calc(100% - 50px);
 }
 
-.tab-content {
+.panel-tab-content {
     display: none;
     height: 100%;
     flex-direction: column;
 }
 
-.tab-content.active {
+.panel-tab-content.active {
     display: flex;
 }
 
@@ -1505,6 +1522,12 @@ body {
     opacity: 0;
     word-break: break-all;
     flex-wrap: nowrap;
+    white-space: normal;
+}
+
+.terminal-line span {
+    word-break: break-all;
+    white-space: normal;
 }
 
 @keyframes terminal-slide-in {
@@ -1673,8 +1696,11 @@ body {
 .data-table th, .data-table td {
     padding: 0.6rem 0.85rem;
     border-bottom: 1px solid var(--border-light);
-    white-space: nowrap;
     font-size: 0.78rem;
+}
+
+.data-table th {
+    white-space: nowrap;
 }
 
 .data-table th {
@@ -1950,6 +1976,11 @@ body {
 .cursor {
     color: var(--accent-red);
     animation: blink 0.8s step-end infinite;
+}
+
+@keyframes preloader-logo-pulse {
+    0% { transform: scale(1); opacity: 0.9; filter: drop-shadow(0 0 10px rgba(255,255,255,0.3)); }
+    100% { transform: scale(1.05); opacity: 1; filter: drop-shadow(0 0 20px rgba(255,255,255,0.6)); }
 }
 
 .progress-bar-loader {
@@ -2724,7 +2755,7 @@ body {
     }
     
     .control-panel .tab-content-container,
-    .control-panel .tab-content,
+    .control-panel .panel-tab-content,
     .control-panel .input-panel-body {
         height: auto;
     }
@@ -2825,7 +2856,7 @@ body {
     margin: 0 1rem;
 }
 
-.tab-btn {
+.header-tab-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -2841,24 +2872,43 @@ body {
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.tab-btn:hover {
+.header-tab-btn:hover {
     color: var(--text-primary);
     background: rgba(255, 255, 255, 0.5);
 }
 
-.tab-btn.active {
+.header-tab-btn.active {
     background: #ffffff;
     color: var(--accent-red);
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.04), inset 0 0 0 1px rgba(0, 0, 0, 0.01);
 }
 
-.tab-content {
+.panel-tab-content {
     animation: fadeInTab 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+.header-tab-content {
+    display: none;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.header-tab-content.active {
+    display: flex;
+    animation: fadeInTab 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 @keyframes fadeInTab {
-    from { opacity: 0; transform: translateY(6px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(16px) scale(0.985);
+        filter: blur(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0);
+    }
 }
 
 /* Config Panel Styles */
@@ -2956,3 +3006,177 @@ body {
     color: #34d399;
 }
 
+/* Upload Card Hover & Selected States */
+.upload-card {
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.upload-card:hover {
+    border-color: var(--accent-red) !important;
+    background: rgba(213, 43, 30, 0.02) !important;
+    box-shadow: 0 8px 24px rgba(213, 43, 30, 0.06);
+    transform: translateY(-2px);
+}
+.upload-card:hover svg {
+    transform: scale(1.1);
+}
+.upload-card.upload-card-selected {
+    border-color: #10b981 !important; /* Emerald green */
+    border-style: solid !important;
+    background: rgba(16, 185, 129, 0.04) !important;
+    box-shadow: 0 8px 24px rgba(16, 185, 129, 0.08);
+}
+.upload-card.upload-card-selected svg {
+    color: #10b981 !important;
+}
+
+/* Ensure the right panel scales and doesn't push layout in main-panel grid */
+.right-panel {
+    min-width: 0;
+}
+
+/* Compact styling for merge preview table */
+#merge-preview-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+#merge-preview-table th, 
+#merge-preview-table td {
+    padding: 0.45rem 0.6rem;
+    font-size: 0.74rem;
+    white-space: normal;
+    word-break: break-word;
+    vertical-align: middle;
+}
+
+#merge-preview-table th {
+    font-size: 0.76rem;
+    white-space: nowrap;
+}
+
+#merge-preview-table td.font-mono {
+    font-size: 0.7rem !important;
+}
+
+/* Ensure the left panel is sticky and stays visible when scrolling the long preview list */
+#tab-content-merge .left-panel {
+    position: sticky;
+    top: 1.5rem;
+    align-self: start;
+    height: 640px;
+    display: flex;
+    flex-direction: column;
+}
+
+#tab-content-merge .left-panel .merge-log-card {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+/* Enforce fluid height on merge terminal and wrap long log text lines */
+#merge-terminal {
+    flex-grow: 1;
+    height: 0;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+}
+
+#merge-terminal .log-line {
+    word-break: break-all !important;
+    white-space: normal !important;
+}
+
+#merge-terminal .log-line span {
+    word-break: break-all !important;
+    white-space: normal !important;
+}
+
+/* Premium Status Badges with Pulse Dots */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0.25rem 0.65rem;
+    border-radius: 30px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: 1px solid transparent;
+}
+
+.badge-success {
+    background: rgba(16, 185, 129, 0.08) !important;
+    color: #10b981 !important;
+    border-color: rgba(16, 185, 129, 0.25) !important;
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.05);
+}
+
+.badge-success::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    background-color: #10b981;
+    border-radius: 50%;
+    display: inline-block;
+    box-shadow: 0 0 8px #10b981;
+}
+
+.badge-fail {
+    background: rgba(239, 68, 68, 0.08) !important;
+    color: #ef4444 !important;
+    border-color: rgba(239, 68, 68, 0.25) !important;
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.05);
+}
+
+.badge-fail::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    background-color: #ef4444;
+    border-radius: 50%;
+    display: inline-block;
+    box-shadow: 0 0 8px #ef4444;
+    animation: pulse-red-dot 1.2s infinite alternate;
+}
+
+.badge-warning {
+    background: rgba(245, 158, 11, 0.08) !important;
+    color: #f59e0b !important;
+    border-color: rgba(245, 158, 11, 0.25) !important;
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.05);
+}
+
+.badge-warning::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    background-color: #f59e0b;
+    border-radius: 50%;
+    display: inline-block;
+    box-shadow: 0 0 8px #f59e0b;
+}
+
+@keyframes pulse-red-dot {
+    from { opacity: 0.4; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1.2); }
+}
+
+/* Premium Brand-Aware Hover border glows */
+.glass {
+    border: 1px solid rgba(255, 255, 255, 0.45) !important;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.45) 100%) !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.02), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+#tab-content-merge .glass:hover {
+    border-color: rgba(13, 148, 136, 0.35) !important; /* Teal border glow for Bıçakcılar merge tab */
+    box-shadow: 0 15px 35px rgba(13, 148, 136, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+#tab-content-query .glass:hover {
+    border-color: rgba(229, 62, 62, 0.35) !important; /* Red border glow for KoçMedical query tab */
+    box-shadow: 0 15px 35px rgba(229, 62, 62, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}

@@ -27,3 +27,5 @@ scratch/
 *.XLSX
 digit_references_v*.json
 *.zip
+temp_*/
+**/temp_*/

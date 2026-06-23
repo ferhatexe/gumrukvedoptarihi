@@ -7,13 +7,15 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=5.0">
+    <link rel="preload" href="https://kocmedical.com/Frontend/img/kocMedikal-logo.jpg" as="image" type="image/jpeg">
+    <link rel="stylesheet" href="style.css?v=6.0">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23E53E3E'/%3E%3Cstop offset='100%25' stop-color='%239B2C2C'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' rx='22' fill='url(%23g)'/%3E%3Cpath d='M30 25h30l15 15v35c0 3-2 5-5 5H30c-3 0-5-2-5-5V30c0-3 2-5 5-5z' fill='%23FFFFFF'/%3E%3Cpath d='M60 25v15h15' fill='none' stroke='%23E53E3E' stroke-width='4'/%3E%3Cpath d='M38 52l6 6 18-18' fill='none' stroke='%23E53E3E' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 </head>
 <body>
     <!-- PRELOADER OVERLAY -->
     <div id="preloader" class="preloader-overlay">
         <div class="preloader-content">
+            <img class="preloader-logo" src="https://kocmedical.com/Frontend/img/kocMedikal-logo.jpg" alt="KoçMedical Logo" style="height: 52px; width: auto; object-fit: contain; margin-bottom: 0.5rem; filter: drop-shadow(0 0 12px rgba(255,255,255,0.45)); border-radius: 4px; animation: preloader-logo-pulse 2s infinite alternate;">
             <div class="terminal-loader">
                 <span class="typing-text"></span><span class="cursor">_</span>
             </div>
@@ -48,25 +50,25 @@
     <div class="container">
         <!-- HEADER -->
         <header class="app-header glass">
-            <div class="logo-area">
-                <svg class="logo-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                </svg>
+            <div class="logo-area" style="display: flex; align-items: center; gap: 1.25rem;">
+                <!-- Company Logo Image (KoçMedical) -->
+                <img class="company-logo-img" src="https://kocmedical.com/Frontend/img/kocMedikal-logo.jpg" alt="KoçMedical Logo" style="height: 48px; width: auto; object-fit: contain; flex-shrink: 0; max-width: 200px; border-radius: 4px;">
+                <div class="logo-divider" style="width: 1px; height: 28px; background: var(--border-light); flex-shrink: 0;"></div>
                 <div class="logo-text">
                     <h1>Gümrük Beyanname Sorgulama</h1>
-                    <p class="subtitle">İntaç Tarihi Çekici ve Excel Güncelleyici</p>
+                    <p class="subtitle" id="app-subtitle">İntaç Tarihi Çekici ve Excel Güncelleyici</p>
                 </div>
             </div>
             
             <!-- TAB NAVIGATION -->
             <div class="tab-navigation">
-                <button id="tab-btn-query" class="tab-btn active" onclick="switchTab('query')">
+                <button id="tab-btn-query" class="header-tab-btn active" onclick="switchHeaderTab('query')">
                     <svg class="tab-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width: 16px; height: 16px; margin-right: 6px; vertical-align: middle;">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.637 10.637z" />
                     </svg>
                     İntaç Sorgulama
                 </button>
-                <button id="tab-btn-merge" class="tab-btn" onclick="switchTab('merge')">
+                <button id="tab-btn-merge" class="header-tab-btn" onclick="switchHeaderTab('merge')">
                     <svg class="tab-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width: 16px; height: 16px; margin-right: 6px; vertical-align: middle;">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                     </svg>
@@ -82,7 +84,7 @@
         </header>
 
         <!-- TAB CONTENT: QUERY -->
-        <div id="tab-content-query" class="tab-content active">
+        <div id="tab-content-query" class="header-tab-content active">
             <!-- HERO SECTION -->
             <section class="hero-section glass">
             <div class="hero-glow-1"></div>
@@ -233,13 +235,13 @@
             <!-- LEFT COLUMN: TABBED CONTROL CENTER -->
             <section class="panel-section control-panel glass">
                 <div class="tabs-header">
-                    <button class="tab-btn active" data-tab="tab-input">
+                    <button class="panel-tab-btn active" data-tab="tab-input">
                         <svg class="tab-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                         </svg>
                         Veri Girişi & Excel
                     </button>
-                    <button class="tab-btn" data-tab="tab-terminal">
+                    <button class="panel-tab-btn" data-tab="tab-terminal">
                         <svg class="tab-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
                         </svg>
@@ -249,7 +251,7 @@
                 
                 <div class="tab-content-container">
                     <!-- TAB 1: DATA INPUT -->
-                    <div id="tab-input" class="tab-content active">
+                    <div id="tab-input" class="panel-tab-content active">
                         <div class="input-panel-body">
                             <!-- Segmented control for toggling between Excel and Free Text -->
                             <div class="input-mode-selector">
@@ -317,7 +319,7 @@
                     </div>
                     
                     <!-- TAB 2: TERMINAL LOGS -->
-                    <div id="tab-terminal" class="tab-content">
+                    <div id="tab-terminal" class="panel-tab-content">
                         <div class="terminal-wrapper">
                             <div class="terminal-toolbar">
                                 <span class="terminal-status-indicator">● Canlı Log Akışı</span>
@@ -388,7 +390,7 @@
         </div> <!-- end of tab-content-query -->
 
         <!-- TAB CONTENT: MERGE -->
-        <div id="tab-content-merge" class="tab-content" style="display: none;">
+        <div id="tab-content-merge" class="header-tab-content" style="display: none;">
             <!-- MERGE HERO / SECTION -->
             <section class="hero-section glass">
                 <div class="hero-glow-1"></div>
@@ -402,42 +404,59 @@
                     </div>
                     <h2 class="hero-title">Fatura & Beyanname <span>Birleştirme</span></h2>
                     <p class="hero-description">
-                        Yüklenen Excel dosyasındaki fatura ve beyanname numaralarını eşleştirin. İlgili klasörlerdeki PDF dosyalarını otomatik olarak tarayıp eşleştirin, isimlendirin ve birleştirip tek bir çıktı PDF dosyası haline getirin.
+                        Seçtiğiniz Beyanname ZIP, E-Fatura ZIP ve Excel eşleştirme dosyalarını yükleyin. Sistem, ZIP dosyalarının içeriğini açarak faturaları ilgili beyannamelerle otomatik olarak eşleştirir, birleştirir, isimlendirir ve indirmeniz için tek bir ZIP arşivi hazırlar.
                     </p>
                 </div>
             </section>
 
-            <!-- MERGE PATH CONFIGURATION -->
+            <!-- MERGE FILE CONFIGURATION -->
             <section class="config-panel glass card-glow">
-                <h3 class="panel-title">Klasör Ayarları ve Tarama</h3>
-                <div class="config-grid">
-                    <div class="input-group">
-                        <label for="merge-beyan-dir">Beyanname PDF Klasörü Yolu</label>
-                        <input type="text" id="merge-beyan-dir" placeholder="Örn: C:\Gümrük\Beyannameler" class="form-input" value="c:\WORK\00_INBOX\MAYIS BEYANLAR\MAYIS BEYANLAR\BEYANNAME PDF">
+                <h3 class="panel-title">Dosya Yükleme ve Birleştirme Paneli</h3>
+                <div class="config-grid upload-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                    <!-- 1. BEYANNAME ZIP -->
+                    <div class="upload-card glass" id="card-beyan-zip" style="border: 2px dashed var(--border-medium); padding: 1.5rem; border-radius: 12px; text-align: center; cursor: pointer; transition: all 0.3s ease; position: relative;">
+                        <input type="file" id="merge-beyan-zip-input" accept=".zip" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;" onchange="handleMergeFileSelected('beyan-zip')">
+                        <div class="upload-card-content">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width: 32px; height: 32px; color: var(--accent-red); margin-bottom: 0.5rem; transition: transform 0.2s ease;">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                            </svg>
+                            <h4 style="font-size: 0.9rem; font-weight: 700; margin-bottom: 0.25rem;">Beyanname ZIP Dosyası</h4>
+                            <p style="font-size: 0.75rem; color: var(--text-secondary);" id="lbl-beyan-zip">Dosya seçin veya sürükleyin (.zip)</p>
+                        </div>
                     </div>
-                    <div class="input-group">
-                        <label for="merge-fatura-dir">Fatura PDF Klasörü Yolu</label>
-                        <input type="text" id="merge-fatura-dir" placeholder="Örn: C:\Gümrük\Faturalar" class="form-input" value="c:\WORK\00_INBOX\MAYIS BEYANLAR\MAYIS BEYANLAR\İHRACAT MAYIS FATURALAR">
+
+                    <!-- 2. FATURA ZIP -->
+                    <div class="upload-card glass" id="card-fatura-zip" style="border: 2px dashed var(--border-medium); padding: 1.5rem; border-radius: 12px; text-align: center; cursor: pointer; transition: all 0.3s ease; position: relative;">
+                        <input type="file" id="merge-fatura-zip-input" accept=".zip" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;" onchange="handleMergeFileSelected('fatura-zip')">
+                        <div class="upload-card-content">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width: 32px; height: 32px; color: var(--accent-red); margin-bottom: 0.5rem; transition: transform 0.2s ease;">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                            </svg>
+                            <h4 style="font-size: 0.9rem; font-weight: 700; margin-bottom: 0.25rem;">E-Fatura ZIP Dosyası</h4>
+                            <p style="font-size: 0.75rem; color: var(--text-secondary);" id="lbl-fatura-zip">Dosya seçin veya sürükleyin (.zip)</p>
+                        </div>
                     </div>
-                    <div class="input-group">
-                        <label for="merge-output-dir">Birleştirilmiş PDF Çıktı Klasörü Yolu</label>
-                        <input type="text" id="merge-output-dir" placeholder="Örn: C:\Gümrük\Birleştirilmiş" class="form-input" value="c:\WORK\00_INBOX\MAYIS BEYANLAR\MAYIS BEYANLAR\BİRLEŞTİRİLMİŞ">
+
+                    <!-- 3. EXCEL -->
+                    <div class="upload-card glass" id="card-merge-excel" style="border: 2px dashed var(--border-medium); padding: 1.5rem; border-radius: 12px; text-align: center; cursor: pointer; transition: all 0.3s ease; position: relative;">
+                        <input type="file" id="merge-excel-input" accept=".xlsx,.xls" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;" onchange="handleMergeFileSelected('excel')">
+                        <div class="upload-card-content">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width: 32px; height: 32px; color: var(--accent-red); margin-bottom: 0.5rem; transition: transform 0.2s ease;">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                            </svg>
+                            <h4 style="font-size: 0.9rem; font-weight: 700; margin-bottom: 0.25rem;">Excel Eşleştirme Listesi</h4>
+                            <p style="font-size: 0.75rem; color: var(--text-secondary);" id="lbl-merge-excel">Dosya seçin veya sürükleyin (.xlsx, .xls)</p>
+                        </div>
                     </div>
                 </div>
                 <div class="config-actions">
-                    <button id="btn-merge-preview" onclick="previewMergeFiles()" class="btn btn-primary">
-                        <svg class="btn-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width: 16px; height: 16px; margin-right: 6px; vertical-align: middle;">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    <button id="btn-merge-upload-run" onclick="uploadAndRunMerge()" class="btn btn-primary" style="height: 44px; font-weight: 600; padding: 0 1.5rem;">
+                        <svg class="btn-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width: 18px; height: 18px; margin-right: 8px; vertical-align: middle;">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                         </svg>
-                        Klasörleri Tara & Önizle
+                        Yükle & Birleştirmeyi Başlat
                     </button>
-                    <button id="btn-merge-start" onclick="startMergeProcess()" class="btn btn-success" disabled style="margin-left: 0.5rem;">
-                        <svg class="btn-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width: 16px; height: 16px; margin-right: 6px; vertical-align: middle;">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                        </svg>
-                        Eşleşenleri Birleştir
-                    </button>
-                    <button id="btn-merge-stop" onclick="stopMergeProcess()" class="btn btn-danger" disabled style="margin-left: 0.5rem;">
+                    <button id="btn-merge-stop" onclick="stopMergeProcess()" class="btn btn-danger" disabled style="margin-left: 0.5rem; height: 44px; font-weight: 600; padding: 0 1.5rem;">
                         Durdur
                     </button>
                 </div>
@@ -479,35 +498,83 @@
             <div class="main-panel" id="merge-main-panel" style="display: none; margin-top: 1.5rem;">
                 <!-- Left column: Logs and controls -->
                 <div class="left-panel">
-                    <div class="panel-card glass">
-                        <div class="panel-header">
-                            <h3 class="panel-title">Birleştirme İlerlemesi</h3>
+                    <!-- CARD 1: PROGRESS -->
+                    <div class="panel-card glass card-glow" style="padding: 1.5rem; margin-bottom: 1rem; border-radius: 16px;">
+                        <h3 class="panel-title" style="margin-bottom: 1rem; font-size: 0.95rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; background: linear-gradient(90deg, var(--text-primary) 0%, var(--accent-red) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; border-bottom: 1px solid var(--border-light); padding-bottom: 0.5rem;">Birleştirme İlerlemesi</h3>
+                        <div class="progress-bar-bg" style="margin-bottom: 0.75rem;">
+                            <div class="progress-bar-fill" id="merge-progress-bar-fill" style="width: 0%;"></div>
                         </div>
-                        <div class="progress-bar-container" style="margin-bottom: 1rem; background: var(--border-light); height: 12px; border-radius: 6px; overflow: hidden; position: relative;">
-                            <div class="progress-bar-fill" id="merge-progress-bar-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--accent-red) 0%, #ff6b6b 100%); transition: width 0.3s ease;"></div>
+                        <div class="merge-progress-stats" style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem;">
+                            <span id="merge-progress-text" style="font-weight: 800; color: var(--text-primary);">0% (0/0)</span>
+                            <div style="display: flex; gap: 8px;">
+                                <span class="badge badge-success" id="merge-stat-badge-success" style="font-size: 0.7rem; padding: 0.15rem 0.4rem; background: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 4px; font-weight: 700;">Başarılı: 0</span>
+                                <span class="badge badge-fail" id="merge-stat-badge-fail" style="font-size: 0.7rem; padding: 0.15rem 0.4rem; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 4px; font-weight: 700;">Hatalı: 0</span>
+                            </div>
                         </div>
-                        <div class="progress-text" id="merge-progress-text" style="font-weight: 700; margin-bottom: 1rem; color: var(--text-secondary);">
-                            0% (0/0)
+
+                        <!-- ZIP DOWNLOAD CARD -->
+                        <div id="zip-download-container" class="zip-download-card" style="display: none; margin-top: 1rem; padding: 1rem; border-radius: 12px; border: 1.5px dashed var(--accent-red); background: rgba(213, 43, 30, 0.04); text-align: center;">
+                            <p style="margin-bottom: 0.75rem; font-weight: 600; font-size: 0.95rem; color: var(--text-primary); display: flex; align-items: center; justify-content: center; gap: 6px;">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width: 20px; height: 20px; color: var(--accent-red);">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 13.5l3 3m0 0l3-3m-3 3v-6m10.125-3V17.25c0 .621-.504 1.125-1.125 1.125H3.75c-.621 0-1.125-.504-1.125-1.125V5.625c0-.621.504-1.125 1.125-1.125h5.06l2.25 2.25h8.188c.621 0 1.125.504 1.125 1.125z" />
+                                </svg>
+                                Birleştirilen PDF Belgeleri Hazır!
+                            </p>
+                            <a id="btn-merge-download-zip" href="#" class="btn btn-primary" style="display: inline-flex; align-items: center; justify-content: center; text-decoration: none; width: 100%; box-sizing: border-box; background: linear-gradient(135deg, var(--accent-red) 0%, #ff6b6b 100%); border: none; height: 42px; font-weight: 600;">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" style="width: 18px; height: 18px; margin-right: 8px;">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                                </svg>
+                                ZIP Arşivini İndir
+                            </a>
                         </div>
-                        
-                        <div class="panel-header" style="margin-top: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
-                            <h3 class="panel-title">Canlı Birleştirme Logları</h3>
-                            <button onclick="clearMergeLogs()" class="btn btn-inline btn-secondary" style="font-size: 0.65rem; padding: 0.2rem 0.6rem;">Temizle</button>
-                        </div>
-                        <div class="terminal-container" id="merge-terminal" style="height: 350px; overflow-y: auto; background: #0f172a; color: #f8fafc; font-family: var(--font-mono); font-size: 0.72rem; padding: 1rem; border-radius: 12px; border: 1px solid var(--border-light); box-shadow: inset 0 2px 8px rgba(0,0,0,0.8);">
-                            <!-- WebSocket Merge logs will print here -->
+                    </div>
+
+                    <!-- CARD 2: TERMINAL LOGS -->
+                    <div class="panel-card glass card-glow merge-log-card" style="padding: 1.25rem 1.5rem; border-radius: 16px; display: flex; flex-direction: column;">
+                        <div class="terminal-wrapper" style="margin: 0; border: none; background: transparent; box-shadow: none; display: flex; flex-direction: column; flex-grow: 1;">
+                            <div class="terminal-toolbar" style="padding: 0 0 0.75rem 0; border-bottom: 1px solid var(--border-light); margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center; background: transparent;">
+                                <span class="terminal-status-indicator" style="font-size: 0.8rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">● Canlı Birleştirme Logları</span>
+                                <button onclick="clearMergeLogs()" class="btn-text" style="font-size: 0.75rem; color: var(--text-secondary); background: none; border: none; cursor: pointer; transition: color 0.2s;">Temizle</button>
+                            </div>
+                            <div id="merge-terminal" class="terminal-body" style="overflow-y: auto; background: #0f172a; color: #f8fafc; font-family: var(--font-mono); font-size: 0.72rem; padding: 1rem; border-radius: 12px; border: 1px solid var(--border-light); box-shadow: inset 0 2px 8px rgba(0,0,0,0.8);">
+                                <!-- WebSocket Merge logs will print here -->
+                            </div>
                         </div>
                     </div>
                 </div>
                 
                 <!-- Right column: Preview table -->
                 <div class="right-panel">
-                    <section class="table-section glass card-glow">
-                        <div class="table-header">
-                            <h3 class="panel-title">Eşleşme ve Önizleme Raporu</h3>
+                    <section class="panel-section table-section glass card-glow">
+                        <div class="panel-header">
+                            <h2>Eşleşme ve Önizleme Raporu</h2>
+                            <div class="header-actions">
+                                <select id="filter-merge-status" class="filter-select">
+                                    <option value="all">DURUM: TÜMÜ</option>
+                                    <option value="ready">Birleştirmeye Hazır</option>
+                                    <option value="missing_beyan">Beyanname Yok</option>
+                                    <option value="missing_fatura">Eksik Evrak</option>
+                                    <option value="success">Birleşti</option>
+                                    <option value="fail">Hata Oluştu</option>
+                                </select>
+                                <div class="search-box">
+                                    <svg class="search-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.637 10.637z" />
+                                    </svg>
+                                    <input type="text" id="search-merge-input" placeholder="GCB, Firma veya Çıktı ara...">
+                                </div>
+                            </div>
                         </div>
                         <div class="table-container">
                             <table class="data-table" id="merge-preview-table">
+                                <colgroup>
+                                    <col style="width: 14%;"> <!-- GCB No -->
+                                    <col style="width: 20%;"> <!-- Firma Adı -->
+                                    <col style="width: 7%;">  <!-- Beyan PDF -->
+                                    <col style="width: 24%;"> <!-- Fatura PDF'leri -->
+                                    <col style="width: 22%;"> <!-- Çıktı İsmi -->
+                                    <col style="width: 13%;"> <!-- Durum -->
+                                </colgroup>
                                 <thead>
                                     <tr>
                                         <th>GCB No</th>
@@ -534,13 +601,11 @@
         <footer class="app-footer glass">
             <div class="footer-grid">
                 <div class="footer-col brand-col">
-                    <div class="footer-logo">
-                        <svg class="logo-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                        </svg>
-                        <h3>Gümrük Otomasyonu</h3>
+                    <div class="footer-logo" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                        <!-- Company Logo Image (KoçMedical) -->
+                        <img class="company-logo-img" src="https://kocmedical.com/Frontend/img/kocMedikal-logo.jpg" alt="KoçMedical Logo" style="height: 42px; width: auto; object-fit: contain; flex-shrink: 0; max-width: 170px; border-radius: 4px;">
                     </div>
-                    <p class="footer-desc">GTB gümrük beyannameleri için tescil ve intaç durumlarını yüksek doğrulukla sorgulayan akıllı robotik süreç otomasyonu.</p>
+                    <p class="footer-desc" id="footer-desc-text">GTB gümrük beyannameleri için tescil ve intaç durumlarını yüksek doğrulukla sorgulayan akıllı robotik süreç otomasyonu.</p>
                 </div>
                 
                 <div class="footer-col links-col">
@@ -689,6 +754,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=5.0"></script>
+    <script src="app.js?v=6.0"></script>
 </body>
 </html>
