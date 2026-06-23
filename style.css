@@ -2809,3 +2809,150 @@ body {
         width: 100%;
     }
 }
+
+/* ============================================================
+   TAB NAVIGATION & PDF MERGING SYSTEM STYLES
+   ============================================================ */
+.tab-navigation {
+    display: flex;
+    gap: 0.25rem;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-neutral);
+    padding: 0.2rem;
+    border-radius: 12px;
+    border: 1px solid var(--border-light);
+    margin: 0 1rem;
+}
+
+.tab-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    padding: 0.45rem 1rem;
+    font-family: var(--font-sans);
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    border-radius: 9px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tab-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.tab-btn.active {
+    background: #ffffff;
+    color: var(--accent-red);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.04), inset 0 0 0 1px rgba(0, 0, 0, 0.01);
+}
+
+.tab-content {
+    animation: fadeInTab 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes fadeInTab {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Config Panel Styles */
+.config-panel {
+    padding: 1.5rem;
+    border-radius: 16px;
+    margin-top: 1.5rem;
+    border: 1px solid var(--border-light);
+}
+
+.config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.input-group label {
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.form-input {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    padding: 0.6rem 0.8rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-medium);
+    background: #ffffff;
+    color: var(--text-primary);
+    transition: all 0.2s ease;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 3px rgba(213, 43, 30, 0.1);
+}
+
+.config-actions {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    border-top: 1px solid var(--border-light);
+    padding-top: 1.25rem;
+}
+
+/* Badges for PDF match status */
+.badge-pdf-found {
+    display: inline-flex;
+    align-items: center;
+    background: #ecfdf5;
+    color: #059669;
+    border: 1px solid #a7f3d0;
+    font-size: 0.62rem;
+    font-weight: 800;
+    padding: 0.12rem 0.4rem;
+    border-radius: 4px;
+}
+
+.badge-pdf-missing {
+    display: inline-flex;
+    align-items: center;
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fca5a5;
+    font-size: 0.62rem;
+    font-weight: 800;
+    padding: 0.12rem 0.4rem;
+    border-radius: 4px;
+}
+
+/* Merge Specific Layout Tweaks */
+#merge-terminal .log-line.info {
+    color: #94a3b8;
+}
+#merge-terminal .log-line.warning {
+    color: #fbbf24;
+}
+#merge-terminal .log-line.error {
+    color: #f87171;
+    font-weight: bold;
+}
+#merge-terminal .log-line.success {
+    color: #34d399;
+}
+

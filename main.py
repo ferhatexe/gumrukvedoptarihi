@@ -7,6 +7,12 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, date
 from typing import List, Dict, Any
+from collections import defaultdict
+
+try:
+    from PyPDF2 import PdfMerger
+except ImportError:
+    PdfMerger = None
 
 import openpyxl
 from openpyxl.worksheet.table import Table, TableStyleInfo
@@ -48,6 +54,11 @@ class UserSessionState:
         self.completed_count = 0
         self.total_count = 0
         self.log_history = []
+        
+        # Merge state fields
+        self.is_merge_running = False
+        self.merge_cancel_event = threading.Event()
+        self.merge_task = None
 
 sessions: Dict[str, UserSessionState] = {}
 
@@ -507,6 +518,131 @@ def download_file(session_id: str = None):
         return FileResponse(session.active_excel_path, filename=filename, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     return JSONResponse(status_code=404, content={"success": False, "message": "Excel dosyası bulunamadı veya bağlantı kesildi."})
 
+@app.get("/api/merge/preview")
+def get_merge_preview(session_id: str = None, beyan_dir: str = "", fatura_dir: str = "", output_dir: str = ""):
+    session = get_session(session_id)
+    try:
+        # Validate paths
+        if not beyan_dir or not os.path.exists(beyan_dir):
+            return JSONResponse(status_code=400, content={"success": False, "message": "Beyanname PDF klasörü geçersiz veya bulunamadı."})
+        if not fatura_dir or not os.path.exists(fatura_dir):
+            return JSONResponse(status_code=400, content={"success": False, "message": "Fatura PDF klasörü geçersiz veya bulunamadı."})
+            
+        excel_path = session.active_excel_path
+        if not excel_path or not os.path.exists(excel_path):
+            return JSONResponse(status_code=400, content={"success": False, "message": "Sorgulama tablosu yüklü değil. Lütfen önce bir Excel yükleyin."})
+            
+        # Read excel and group by GCB
+        res = read_excel_data(excel_path)
+        rows = res["rows"]
+        
+        # Group by GCB dynamically
+        gcb_groups = defaultdict(lambda: {"firma": "", "faturalar": []})
+        
+        for item in rows:
+            fatura_no = str(item.get("fatura") or "").strip()
+            firma = str(item.get("firma") or "").strip()
+            gcb = str(item.get("gcb") or "").strip()
+            
+            if not fatura_no or not gcb or fatura_no == "None" or gcb == "None":
+                continue
+                
+            if fatura_no not in gcb_groups[gcb]["faturalar"]:
+                gcb_groups[gcb]["faturalar"].append(fatura_no)
+            gcb_groups[gcb]["firma"] = firma
+            
+        # Index Beyanname PDF directory
+        beyanname_files = {}
+        for f in os.listdir(beyan_dir):
+            if f.endswith(".pdf"):
+                gcb_no = f.replace("_Beyanname.pdf", "").replace("_beyanname.pdf", "")
+                beyanname_files[gcb_no.upper()] = {
+                    "filename": f,
+                    "path": os.path.join(beyan_dir, f)
+                }
+                
+        # Index Fatura PDF directory
+        fatura_files = {}
+        for f in os.listdir(fatura_dir):
+            if f.endswith(".pdf"):
+                match = re.search(r'_(BT[C]?\d+?)005056', f, re.IGNORECASE)
+                if match:
+                    fatura_no = match.group(1).upper()
+                    fatura_files[fatura_no] = {
+                        "filename": f,
+                        "path": os.path.join(fatura_dir, f)
+                    }
+                    
+        # Generate match preview list
+        preview_data = []
+        for gcb, info in sorted(gcb_groups.items()):
+            gcb_upper = gcb.upper()
+            firma = info["firma"]
+            faturalar = info["faturalar"]
+            
+            # Check GCB PDF
+            gcb_pdf_found = gcb_upper in beyanname_files
+            gcb_pdf_info = {
+                "status": "found" if gcb_pdf_found else "missing",
+                "filename": beyanname_files[gcb_upper]["filename"] if gcb_pdf_found else None,
+                "path": beyanname_files[gcb_upper]["path"] if gcb_pdf_found else None
+            }
+            
+            # Check Fatura PDFs
+            fatura_pdfs_list = []
+            faturas_found_count = 0
+            for fat in faturalar:
+                fat_upper = fat.upper()
+                found = fat_upper in fatura_files
+                if found:
+                    faturas_found_count += 1
+                fatura_pdfs_list.append({
+                    "fatura_no": fat,
+                    "status": "found" if found else "missing",
+                    "filename": fatura_files[fat_upper]["filename"] if found else None,
+                    "path": fatura_files[fat_upper]["path"] if found else None
+                })
+                
+            # Status calculation
+            if not gcb_pdf_found:
+                status = "missing_beyan"
+            elif faturas_found_count == 0:
+                status = "missing_fatura"
+            elif faturas_found_count < len(faturalar):
+                status = "partial"
+            else:
+                status = "ready"
+                
+            # Target output file name
+            faturas_part = "_".join(sorted(faturalar))
+            clean_firma = re.sub(r'[\\/*?:"<>|]', "-", firma).replace("&", "and")
+            target_filename = f"{faturas_part}_{clean_firma}_{gcb}.pdf"
+            
+            preview_data.append({
+                "gcb": gcb,
+                "firma": firma,
+                "faturalar": faturalar,
+                "beyan_pdf": gcb_pdf_info,
+                "fatura_pdfs": fatura_pdfs_list,
+                "status": status,
+                "target_filename": target_filename
+            })
+            
+        return JSONResponse(content={
+            "success": True,
+            "data": preview_data,
+            "stats": {
+                "total": len(preview_data),
+                "ready": len([x for x in preview_data if x["status"] == "ready"]),
+                "partial": len([x for x in preview_data if x["status"] == "partial"]),
+                "missing_beyan": len([x for x in preview_data if x["status"] == "missing_beyan"]),
+                "missing_fatura": len([x for x in preview_data if x["status"] == "missing_fatura"])
+            }
+        })
+        
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"success": False, "message": f"Önizleme oluşturulurken hata: {str(e)}"})
+
 
 async def run_scraper_task(session_id: str, websocket: WebSocket, rows_to_query: List[dict]):
     session = get_session(session_id)
@@ -831,6 +967,156 @@ async def run_scraper_task(session_id: str, websocket: WebSocket, rows_to_query:
         session.task = None
 
 
+async def run_pdf_merge_task(session_id: str, websocket: WebSocket, beyan_dir: str, fatura_dir: str, output_dir: str, items_to_merge: List[dict]):
+    session = get_session(session_id)
+    session.is_merge_running = True
+    session.merge_cancel_event.clear()
+    
+    total = len(items_to_merge)
+    completed = 0
+    success_count = 0
+    fail_count = 0
+    
+    try:
+        await websocket.send_json({"type": "merge_log", "message": f"[SİSTEM] {total} adet evrak birleştirme görevi başlatılıyor...", "level": "info"})
+        
+        # Create output directory
+        os.makedirs(output_dir, exist_ok=True)
+        
+        for item in items_to_merge:
+            if session.merge_cancel_event.is_set() or not session.is_merge_running:
+                await websocket.send_json({"type": "merge_log", "message": "[SİSTEM] Birleştirme işlemi durduruldu.", "level": "warning"})
+                break
+                
+            gcb = item.get("gcb")
+            firma = item.get("firma")
+            faturalar = item.get("faturalar", [])
+            target_filename = item.get("target_filename")
+            
+            await websocket.send_json({"type": "merge_log", "message": f"[{gcb}] Eşleştiriliyor (Firma: {firma}, Faturalar: {faturalar})...", "level": "info"})
+            
+            # 1. Check if PdfMerger is available
+            if PdfMerger is None:
+                await websocket.send_json({"type": "merge_log", "message": f"[{gcb}] HATA: PyPDF2 kütüphanesi yüklü değil.", "level": "error"})
+                await websocket.send_json({"type": "merge_item_complete", "gcb": gcb, "status": "fail", "message": "PyPDF2 kütüphanesi eksik."})
+                fail_count += 1
+                completed += 1
+                await websocket.send_json({"type": "merge_progress", "completed": completed, "total": total})
+                continue
+                
+            # 2. Get file paths
+            # GCB filename search
+            beyan_path = None
+            try:
+                for f in os.listdir(beyan_dir):
+                    if f.endswith(".pdf"):
+                        gcb_no = f.replace("_Beyanname.pdf", "").replace("_beyanname.pdf", "")
+                        if gcb_no.upper() == gcb.upper():
+                            beyan_path = os.path.join(beyan_dir, f)
+                            break
+            except Exception as le:
+                await websocket.send_json({"type": "merge_log", "message": f"[{gcb}] HATA: Beyanname klasörü okunamadı: {str(le)}", "level": "error"})
+                await websocket.send_json({"type": "merge_item_complete", "gcb": gcb, "status": "fail", "message": "Dizin okuma hatası."})
+                fail_count += 1
+                completed += 1
+                await websocket.send_json({"type": "merge_progress", "completed": completed, "total": total})
+                continue
+                        
+            if not beyan_path:
+                await websocket.send_json({"type": "merge_log", "message": f"[{gcb}] HATA: Beyanname PDF dosyası bulunamadı.", "level": "error"})
+                await websocket.send_json({"type": "merge_item_complete", "gcb": gcb, "status": "fail", "message": "Beyanname PDF eksik."})
+                fail_count += 1
+                completed += 1
+                await websocket.send_json({"type": "merge_progress", "completed": completed, "total": total})
+                continue
+                
+            # Invoice files matching
+            fatura_paths = []
+            missing_invoices = []
+            try:
+                for fat in faturalar:
+                    fat_upper = fat.upper()
+                    found_path = None
+                    for f in os.listdir(fatura_dir):
+                        if f.endswith(".pdf"):
+                            match = re.search(r'_(BT[C]?\d+?)005056', f, re.IGNORECASE)
+                            if match and match.group(1).upper() == fat_upper:
+                                found_path = os.path.join(fatura_dir, f)
+                                break
+                    if found_path:
+                        fatura_paths.append(found_path)
+                    else:
+                        missing_invoices.append(fat)
+            except Exception as le:
+                await websocket.send_json({"type": "merge_log", "message": f"[{gcb}] HATA: Fatura klasörü okunamadı: {str(le)}", "level": "error"})
+                await websocket.send_json({"type": "merge_item_complete", "gcb": gcb, "status": "fail", "message": "Dizin okuma hatası."})
+                fail_count += 1
+                completed += 1
+                await websocket.send_json({"type": "merge_progress", "completed": completed, "total": total})
+                continue
+                    
+            if missing_invoices:
+                await websocket.send_json({"type": "merge_log", "message": f"[{gcb}] UYARI: Eksik fatura PDF'leri var: {missing_invoices}", "level": "warning"})
+                
+            if not fatura_paths:
+                await websocket.send_json({"type": "merge_log", "message": f"[{gcb}] HATA: Eşleşen hiçbir fatura PDF'i bulunamadı. Atlattırılıyor.", "level": "error"})
+                await websocket.send_json({"type": "merge_item_complete", "gcb": gcb, "status": "fail", "message": "Faturalar eksik."})
+                fail_count += 1
+                completed += 1
+                await websocket.send_json({"type": "merge_progress", "completed": completed, "total": total})
+                continue
+                
+            # 3. Perform PDF Merge
+            output_path = os.path.join(output_dir, target_filename)
+            
+            def do_merge(b_path, f_paths, out_path):
+                merger = PdfMerger()
+                merger.append(b_path)
+                for fp in f_paths:
+                    merger.append(fp)
+                merger.write(out_path)
+                merger.close()
+                
+            try:
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, do_merge, beyan_path, fatura_paths, output_path)
+                
+                await websocket.send_json({
+                    "type": "merge_log", 
+                    "message": f"[{gcb}] BAŞARILI: {target_filename} dosyası oluşturuldu.", 
+                    "level": "success"
+                })
+                await websocket.send_json({"type": "merge_item_complete", "gcb": gcb, "status": "success", "output_name": target_filename})
+                success_count += 1
+            except Exception as e:
+                await websocket.send_json({
+                    "type": "merge_log", 
+                    "message": f"[{gcb}] HATA: PDF birleştirme başarısız: {str(e)}", 
+                    "level": "error"
+                })
+                await websocket.send_json({"type": "merge_item_complete", "gcb": gcb, "status": "fail", "message": str(e)})
+                fail_count += 1
+                
+            completed += 1
+            await websocket.send_json({"type": "merge_progress", "completed": completed, "total": total})
+            await asyncio.sleep(0.05)
+            
+        await websocket.send_json({
+            "type": "merge_finished",
+            "success_count": success_count,
+            "fail_count": fail_count
+        })
+    except Exception as ge:
+        try:
+            await websocket.send_json({"type": "merge_log", "message": f"[HATA] Beklenmeyen sistem hatası: {str(ge)}", "level": "error"})
+            await websocket.send_json({"type": "merge_finished", "success_count": success_count, "fail_count": fail_count + (total - completed)})
+        except Exception:
+            pass
+    finally:
+        session.is_merge_running = False
+        session.merge_task = None
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, session_id: str = None):
     session = get_session(session_id)
@@ -980,13 +1266,39 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str = None):
                 })
                 await websocket.send_json({"type": "log", "message": "[SİSTEM] Tablo sıfırlandı. Orijinal Excel bağlantısı kesildi. Yeni görev bekleniyor..."})
                 
+            elif action == "run_merge":
+                if session.is_merge_running:
+                    await websocket.send_json({"type": "merge_log", "message": "Evrak birleştirme işlemi zaten çalışıyor.", "level": "warning"})
+                    continue
+                    
+                beyan_dir = payload.get("beyan_dir")
+                fatura_dir = payload.get("fatura_dir")
+                output_dir = payload.get("output_dir")
+                items_to_merge = payload.get("items", [])
+                
+                if not items_to_merge:
+                    await websocket.send_json({"type": "merge_log", "message": "HATA: Birleştirilecek geçerli bir veri listesi bulunamadı.", "level": "error"})
+                    continue
+                    
+                session.merge_task = asyncio.create_task(run_pdf_merge_task(
+                    session_id, websocket, beyan_dir, fatura_dir, output_dir, items_to_merge
+                ))
+
             elif action == "stop":
+                any_stopped = False
                 if session.is_running:
                     session.is_running = False
                     session.cancel_event.set()  # Instant cancel signal
                     await websocket.send_json({"type": "log", "message": "Durdurma sinyali gönderildi — tüm işçiler durduruluyor..."})
-                else:
-                    await websocket.send_json({"type": "log", "message": "Çalışan aktif bir sorgulama işlemi yok."})
+                    any_stopped = True
+                if session.is_merge_running:
+                    session.is_merge_running = False
+                    session.merge_cancel_event.set()
+                    await websocket.send_json({"type": "merge_log", "message": "Durdurma sinyali gönderildi — evrak birleştirme sonlandırılıyor...", "level": "warning"})
+                    any_stopped = True
+                    
+                if not any_stopped:
+                    await websocket.send_json({"type": "log", "message": "Çalışan aktif bir işlem yok."})
                     
     except WebSocketDisconnect:
         manager.disconnect(session_id, websocket)

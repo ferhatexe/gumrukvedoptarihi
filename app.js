@@ -644,6 +644,34 @@ function handleWebSocketMessage(msg) {
             btnStop.setAttribute("disabled", "true");
             stopQueryTimer(false); // Stop timer silently
             break;
+            
+        case "merge_log":
+            addMergeTerminalLine(msg.message, msg.level || "info");
+            break;
+            
+        case "merge_item_complete":
+            updateMergeTableRowStatus(msg.gcb, msg.status, msg.output_name, msg.message);
+            break;
+            
+        case "merge_progress":
+            const mergePercent = Math.round((msg.completed / msg.total) * 100);
+            document.getElementById("merge-progress-bar-fill").style.width = mergePercent + "%";
+            document.getElementById("merge-progress-text").innerText = `${mergePercent}% (${msg.completed}/${msg.total})`;
+            break;
+            
+        case "merge_finished":
+            document.getElementById("btn-merge-start").removeAttribute("disabled");
+            document.getElementById("btn-merge-preview").removeAttribute("disabled");
+            document.getElementById("btn-merge-stop").setAttribute("disabled", "true");
+            
+            if (msg.fail_count === 0) {
+                addMergeTerminalLine(`[SİSTEM] Birleştirme işlemi tamamlandı! Başarılı: ${msg.success_count}, Hatalı: ${msg.fail_count}`, "success");
+                soundEngine.playSuccess();
+            } else {
+                addMergeTerminalLine(`[SİSTEM] Birleştirme işlemi bitti fakat bazı hatalar var. Başarılı: ${msg.success_count}, Hatalı: ${msg.fail_count}`, "warning");
+                soundEngine.playError();
+            }
+            break;
     }
 }
 
@@ -1462,4 +1490,253 @@ function updateCooldowns() {
             btn.onclick = () => querySingleRow(row, gcb);
         }
     });
+}
+
+// Tab Switching
+let activeTab = 'query';
+function switchTab(tab) {
+    if (activeTab === tab) return;
+    activeTab = tab;
+    
+    // Tab buttons
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById(`tab-btn-${tab}`).classList.add('active');
+    
+    // Tab contents
+    document.querySelectorAll('.tab-content').forEach(content => content.style.display = 'none');
+    document.getElementById(`tab-content-${tab}`).style.display = 'block';
+}
+
+// PDF Merge Preview Data
+let mergePreviewItems = [];
+
+async function previewMergeFiles() {
+    const beyanDir = document.getElementById("merge-beyan-dir").value.trim();
+    const faturaDir = document.getElementById("merge-fatura-dir").value.trim();
+    const outputDir = document.getElementById("merge-output-dir").value.trim();
+    const btnPreview = document.getElementById("btn-merge-preview");
+    
+    if (!beyanDir || !faturaDir || !outputDir) {
+        alert("HATA: Klasör yollarının tamamını doldurmanız gerekmektedir.");
+        return;
+    }
+    
+    btnPreview.setAttribute("disabled", "true");
+    btnPreview.innerText = "Taranıyor...";
+    
+    try {
+        const response = await fetch(`/api/merge/preview?session_id=${sessionId}&beyan_dir=${encodeURIComponent(beyanDir)}&fatura_dir=${encodeURIComponent(faturaDir)}&output_dir=${encodeURIComponent(outputDir)}`);
+        const result = await response.json();
+        
+        if (!result.success) {
+            alert("HATA: " + result.message);
+            renderMergeTableError(result.message);
+            document.getElementById("merge-stats-grid").style.display = "none";
+            document.getElementById("merge-main-panel").style.display = "none";
+            document.getElementById("btn-merge-start").setAttribute("disabled", "true");
+            return;
+        }
+        
+        mergePreviewItems = result.data || [];
+        
+        // Show panels
+        document.getElementById("merge-stats-grid").style.display = "grid";
+        document.getElementById("merge-main-panel").style.display = "flex";
+        
+        // Update stats
+        document.getElementById("stat-merge-total").innerText = result.stats.total;
+        document.getElementById("stat-merge-ready").innerText = result.stats.ready;
+        document.getElementById("stat-merge-missing-beyan").innerText = result.stats.missing_beyan;
+        document.getElementById("stat-merge-missing-fatura").innerText = result.stats.missing_fatura;
+        
+        // Render preview table
+        renderMergePreviewTable(mergePreviewItems);
+        
+        // Enable Merge button if we have ready files
+        const btnStartMerge = document.getElementById("btn-merge-start");
+        if (result.stats.ready > 0) {
+            btnStartMerge.removeAttribute("disabled");
+            addMergeTerminalLine(`[SİSTEM] Tarama tamamlandı. Birleştirmeye hazır ${result.stats.ready} adet dosya grubu bulundu.`, "success");
+        } else {
+            btnStartMerge.setAttribute("disabled", "true");
+            addMergeTerminalLine(`[SİSTEM] Tarama tamamlandı. Birleştirmeye hazır dosya grubu bulunamadı. Lütfen eksik dosyaları kontrol edin.`, "warning");
+        }
+        
+    } catch (e) {
+        console.error(e);
+        alert("Bağlantı Hatası: Tarama işlemi başarısız.");
+        renderMergeTableError("Sunucu ile bağlantı kurulamadı.");
+    } finally {
+        btnPreview.removeAttribute("disabled");
+        btnPreview.innerHTML = `
+            <svg class="btn-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width: 16px; height: 16px; margin-right: 6px; vertical-align: middle;">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            Klasörleri Tara & Önizle
+        `;
+    }
+}
+
+function renderMergePreviewTable(items) {
+    const tbody = document.getElementById("merge-table-body");
+    tbody.innerHTML = "";
+    
+    if (items.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="loading-cell" style="text-align: center; padding: 2rem;">Excel tablosunda fatura/beyan verisi bulunamadı.</td></tr>`;
+        return;
+    }
+    
+    items.forEach(item => {
+        const tr = document.createElement("tr");
+        tr.id = `merge-row-${item.gcb}`;
+        
+        // GCB cell
+        const tdGcb = document.createElement("td");
+        tdGcb.className = "font-mono";
+        tdGcb.innerHTML = `<strong>${item.gcb}</strong>`;
+        
+        // Company name cell
+        const tdFirma = document.createElement("td");
+        tdFirma.className = "truncate";
+        tdFirma.title = item.firma;
+        tdFirma.innerText = truncate(item.firma, 30);
+        
+        // Beyanname PDF status cell
+        const tdBeyanPdf = document.createElement("td");
+        if (item.beyan_pdf.status === "found") {
+            tdBeyanPdf.innerHTML = `<span class="badge-pdf-found">Var</span>`;
+        } else {
+            tdBeyanPdf.innerHTML = `<span class="badge-pdf-missing">Eksik</span>`;
+        }
+        
+        // Fatura PDFs status list cell
+        const tdFaturaPdfs = document.createElement("td");
+        tdFaturaPdfs.style.display = "flex";
+        tdFaturaPdfs.style.flexWrap = "wrap";
+        tdFaturaPdfs.style.gap = "0.25rem";
+        item.fatura_pdfs.forEach(fat => {
+            const span = document.createElement("span");
+            if (fat.status === "found") {
+                span.className = "badge-pdf-found";
+                span.innerText = `${fat.fatura_no} (Var)`;
+            } else {
+                span.className = "badge-pdf-missing";
+                span.innerText = `${fat.fatura_no} (Yok)`;
+            }
+            tdFaturaPdfs.appendChild(span);
+        });
+        
+        // Target name
+        const tdOutput = document.createElement("td");
+        tdOutput.className = "font-mono";
+        tdOutput.style.fontSize = "0.72rem";
+        tdOutput.innerText = item.target_filename;
+        
+        // Status Badge cell
+        const tdStatus = document.createElement("td");
+        tdStatus.id = `merge-status-cell-${item.gcb}`;
+        let statusBadge = "";
+        if (item.status === "ready") {
+            statusBadge = `<span class="badge badge-success">Hazır</span>`;
+        } else if (item.status === "missing_beyan") {
+            statusBadge = `<span class="badge badge-fail">Beyanname Yok</span>`;
+        } else {
+            statusBadge = `<span class="badge badge-warning">Eksik Evrak</span>`;
+        }
+        tdStatus.innerHTML = statusBadge;
+        
+        tr.appendChild(tdGcb);
+        tr.appendChild(tdFirma);
+        tr.appendChild(tdBeyanPdf);
+        tr.appendChild(tdFaturaPdfs);
+        tr.appendChild(tdOutput);
+        tr.appendChild(tdStatus);
+        
+        tbody.appendChild(tr);
+    });
+}
+
+function renderMergeTableError(msg) {
+    const tbody = document.getElementById("merge-table-body");
+    tbody.innerHTML = `<tr><td colspan="6" class="loading-cell" style="text-align: center; padding: 2rem; color: var(--accent-red); font-weight: 700;">Hata: ${msg}</td></tr>`;
+}
+
+function updateMergeTableRowStatus(gcb, status, outputName, errorMessage) {
+    const statusCell = document.getElementById(`merge-status-cell-${gcb}`);
+    const row = document.getElementById(`merge-row-${gcb}`);
+    
+    if (statusCell) {
+        if (status === "success") {
+            statusCell.innerHTML = `<span class="badge badge-success">Birleşti</span>`;
+            if (row) {
+                row.style.background = "rgba(16, 185, 129, 0.04)";
+            }
+        } else {
+            statusCell.innerHTML = `<span class="badge badge-fail" title="${errorMessage || ''}">Hatalı</span>`;
+            if (row) {
+                row.style.background = "rgba(239, 68, 68, 0.04)";
+            }
+        }
+    }
+}
+
+// WebSocket Merge Start / Stop
+function startMergeProcess() {
+    const beyanDir = document.getElementById("merge-beyan-dir").value.trim();
+    const faturaDir = document.getElementById("merge-fatura-dir").value.trim();
+    const outputDir = document.getElementById("merge-output-dir").value.trim();
+    
+    // Select items that are ready or partial
+    const readyItems = mergePreviewItems.filter(item => item.status === "ready" || item.status === "partial");
+    
+    if (readyItems.length === 0) {
+        alert("Uyarı: Birleştirilecek uygun durumda evrak grubu bulunamadı.");
+        return;
+    }
+    
+    document.getElementById("btn-merge-start").setAttribute("disabled", "true");
+    document.getElementById("btn-merge-preview").setAttribute("disabled", "true");
+    document.getElementById("btn-merge-stop").removeAttribute("disabled");
+    
+    // Reset progress bar
+    document.getElementById("merge-progress-bar-fill").style.width = "0%";
+    document.getElementById("merge-progress-text").innerText = `0% (0/${readyItems.length})`;
+    
+    clearMergeLogs();
+    
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+            action: "run_merge",
+            beyan_dir: beyanDir,
+            fatura_dir: faturaDir,
+            output_dir: outputDir,
+            items: readyItems
+        }));
+    }
+}
+
+function stopMergeProcess() {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ action: "stop" }));
+    }
+}
+
+// Merge Terminal Logs
+function addMergeTerminalLine(message, level = "info") {
+    const terminal = document.getElementById("merge-terminal");
+    if (!terminal) return;
+    
+    const time = new Date().toLocaleTimeString("tr-TR");
+    const div = document.createElement("div");
+    div.className = `log-line ${level}`;
+    div.style.marginBottom = "0.25rem";
+    div.innerHTML = `<span style="color: var(--text-muted); margin-right: 6px;">[${time}]</span> ${message}`;
+    
+    terminal.appendChild(div);
+    terminal.scrollTop = terminal.scrollHeight;
+}
+
+function clearMergeLogs() {
+    const terminal = document.getElementById("merge-terminal");
+    if (terminal) terminal.innerHTML = "";
 }

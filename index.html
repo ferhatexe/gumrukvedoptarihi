@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=4.3">
+    <link rel="stylesheet" href="style.css?v=5.0">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23E53E3E'/%3E%3Cstop offset='100%25' stop-color='%239B2C2C'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' rx='22' fill='url(%23g)'/%3E%3Cpath d='M30 25h30l15 15v35c0 3-2 5-5 5H30c-3 0-5-2-5-5V30c0-3 2-5 5-5z' fill='%23FFFFFF'/%3E%3Cpath d='M60 25v15h15' fill='none' stroke='%23E53E3E' stroke-width='4'/%3E%3Cpath d='M38 52l6 6 18-18' fill='none' stroke='%23E53E3E' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -57,6 +57,23 @@
                     <p class="subtitle">İntaç Tarihi Çekici ve Excel Güncelleyici</p>
                 </div>
             </div>
+            
+            <!-- TAB NAVIGATION -->
+            <div class="tab-navigation">
+                <button id="tab-btn-query" class="tab-btn active" onclick="switchTab('query')">
+                    <svg class="tab-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width: 16px; height: 16px; margin-right: 6px; vertical-align: middle;">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.637 10.637z" />
+                    </svg>
+                    İntaç Sorgulama
+                </button>
+                <button id="tab-btn-merge" class="tab-btn" onclick="switchTab('merge')">
+                    <svg class="tab-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width: 16px; height: 16px; margin-right: 6px; vertical-align: middle;">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                    </svg>
+                    Evrak Birleştirme (PDF)
+                </button>
+            </div>
+            
             <div class="status-area">
                 <span id="active-file-badge" class="active-file-text">Aktif Dosya: EXPORT.XLSX</span>
                 <span id="connection-status-dot" class="status-dot offline"></span>
@@ -64,8 +81,10 @@
             </div>
         </header>
 
-        <!-- HERO SECTION -->
-        <section class="hero-section glass">
+        <!-- TAB CONTENT: QUERY -->
+        <div id="tab-content-query" class="tab-content active">
+            <!-- HERO SECTION -->
+            <section class="hero-section glass">
             <div class="hero-glow-1"></div>
             <div class="hero-glow-2"></div>
             <div class="hero-glow-3"></div>
@@ -366,6 +385,150 @@
                 </div>
             </section>
         </div> <!-- end of main-panel -->
+        </div> <!-- end of tab-content-query -->
+
+        <!-- TAB CONTENT: MERGE -->
+        <div id="tab-content-merge" class="tab-content" style="display: none;">
+            <!-- MERGE HERO / SECTION -->
+            <section class="hero-section glass">
+                <div class="hero-glow-1"></div>
+                <div class="hero-glow-2"></div>
+                <div class="hero-glow-3"></div>
+                <div class="hero-grid-bg"></div>
+                <div class="hero-content">
+                    <div class="hero-badge">
+                        <span class="pulse-dot"></span>
+                        <span class="badge-text">PDF MODÜLÜ AKTİF</span>
+                    </div>
+                    <h2 class="hero-title">Fatura & Beyanname <span>Birleştirme</span></h2>
+                    <p class="hero-description">
+                        Yüklenen Excel dosyasındaki fatura ve beyanname numaralarını eşleştirin. İlgili klasörlerdeki PDF dosyalarını otomatik olarak tarayıp eşleştirin, isimlendirin ve birleştirip tek bir çıktı PDF dosyası haline getirin.
+                    </p>
+                </div>
+            </section>
+
+            <!-- MERGE PATH CONFIGURATION -->
+            <section class="config-panel glass card-glow">
+                <h3 class="panel-title">Klasör Ayarları ve Tarama</h3>
+                <div class="config-grid">
+                    <div class="input-group">
+                        <label for="merge-beyan-dir">Beyanname PDF Klasörü Yolu</label>
+                        <input type="text" id="merge-beyan-dir" placeholder="Örn: C:\Gümrük\Beyannameler" class="form-input" value="c:\WORK\00_INBOX\MAYIS BEYANLAR\MAYIS BEYANLAR\BEYANNAME PDF">
+                    </div>
+                    <div class="input-group">
+                        <label for="merge-fatura-dir">Fatura PDF Klasörü Yolu</label>
+                        <input type="text" id="merge-fatura-dir" placeholder="Örn: C:\Gümrük\Faturalar" class="form-input" value="c:\WORK\00_INBOX\MAYIS BEYANLAR\MAYIS BEYANLAR\İHRACAT MAYIS FATURALAR">
+                    </div>
+                    <div class="input-group">
+                        <label for="merge-output-dir">Birleştirilmiş PDF Çıktı Klasörü Yolu</label>
+                        <input type="text" id="merge-output-dir" placeholder="Örn: C:\Gümrük\Birleştirilmiş" class="form-input" value="c:\WORK\00_INBOX\MAYIS BEYANLAR\MAYIS BEYANLAR\BİRLEŞTİRİLMİŞ">
+                    </div>
+                </div>
+                <div class="config-actions">
+                    <button id="btn-merge-preview" onclick="previewMergeFiles()" class="btn btn-primary">
+                        <svg class="btn-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width: 16px; height: 16px; margin-right: 6px; vertical-align: middle;">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        Klasörleri Tara & Önizle
+                    </button>
+                    <button id="btn-merge-start" onclick="startMergeProcess()" class="btn btn-success" disabled style="margin-left: 0.5rem;">
+                        <svg class="btn-icon-svg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width: 16px; height: 16px; margin-right: 6px; vertical-align: middle;">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                        </svg>
+                        Eşleşenleri Birleştir
+                    </button>
+                    <button id="btn-merge-stop" onclick="stopMergeProcess()" class="btn btn-danger" disabled style="margin-left: 0.5rem;">
+                        Durdur
+                    </button>
+                </div>
+            </section>
+
+            <!-- MERGE STATS GRID -->
+            <section class="stats-grid" id="merge-stats-grid" style="display: none; margin-top: 1.5rem; margin-bottom: 1.5rem;">
+                <div class="stat-card stat-card-total glass">
+                    <div class="stat-info">
+                        <span class="stat-label">Toplam Eşleşen</span>
+                        <span id="stat-merge-total" class="stat-value">0</span>
+                        <span class="stat-subtitle">Beyanname Grubu</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-card-completed glass">
+                    <div class="stat-info">
+                        <span class="stat-label">Birleştirmeye Hazır</span>
+                        <span id="stat-merge-ready" class="stat-value">0</span>
+                        <span class="stat-subtitle">Eksiksiz Beyan</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-card-errors glass">
+                    <div class="stat-info">
+                        <span class="stat-label">Beyan Dosyası Eksik</span>
+                        <span id="stat-merge-missing-beyan" class="stat-value">0</span>
+                        <span class="stat-subtitle">PDF Dosyası Yok</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-card-cooldown glass">
+                    <div class="stat-info">
+                        <span class="stat-label">Fatura Dosyası Eksik</span>
+                        <span id="stat-merge-missing-fatura" class="stat-value">0</span>
+                        <span class="stat-subtitle">Bazı Faturalar Yok</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- MERGE PROGRESS & LOGS PANEL -->
+            <div class="main-panel" id="merge-main-panel" style="display: none; margin-top: 1.5rem;">
+                <!-- Left column: Logs and controls -->
+                <div class="left-panel">
+                    <div class="panel-card glass">
+                        <div class="panel-header">
+                            <h3 class="panel-title">Birleştirme İlerlemesi</h3>
+                        </div>
+                        <div class="progress-bar-container" style="margin-bottom: 1rem; background: var(--border-light); height: 12px; border-radius: 6px; overflow: hidden; position: relative;">
+                            <div class="progress-bar-fill" id="merge-progress-bar-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--accent-red) 0%, #ff6b6b 100%); transition: width 0.3s ease;"></div>
+                        </div>
+                        <div class="progress-text" id="merge-progress-text" style="font-weight: 700; margin-bottom: 1rem; color: var(--text-secondary);">
+                            0% (0/0)
+                        </div>
+                        
+                        <div class="panel-header" style="margin-top: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+                            <h3 class="panel-title">Canlı Birleştirme Logları</h3>
+                            <button onclick="clearMergeLogs()" class="btn btn-inline btn-secondary" style="font-size: 0.65rem; padding: 0.2rem 0.6rem;">Temizle</button>
+                        </div>
+                        <div class="terminal-container" id="merge-terminal" style="height: 350px; overflow-y: auto; background: #0f172a; color: #f8fafc; font-family: var(--font-mono); font-size: 0.72rem; padding: 1rem; border-radius: 12px; border: 1px solid var(--border-light); box-shadow: inset 0 2px 8px rgba(0,0,0,0.8);">
+                            <!-- WebSocket Merge logs will print here -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Right column: Preview table -->
+                <div class="right-panel">
+                    <section class="table-section glass card-glow">
+                        <div class="table-header">
+                            <h3 class="panel-title">Eşleşme ve Önizleme Raporu</h3>
+                        </div>
+                        <div class="table-container">
+                            <table class="data-table" id="merge-preview-table">
+                                <thead>
+                                    <tr>
+                                        <th>GCB No</th>
+                                        <th>Firma Adı</th>
+                                        <th>Beyan PDF</th>
+                                        <th>Fatura PDF'leri</th>
+                                        <th>Çıktı İsmi</th>
+                                        <th>Durum</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="merge-table-body">
+                                    <tr>
+                                        <td colspan="6" class="loading-cell" style="text-align: center; padding: 2rem;">Lütfen klasörleri taratarak önizleme yapın...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </div> <!-- end of tab-content-merge -->
 
         <!-- FOOTER -->
         <footer class="app-footer glass">
@@ -526,6 +689,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=4.3"></script>
+    <script src="app.js?v=5.0"></script>
 </body>
 </html>
