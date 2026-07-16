@@ -333,6 +333,18 @@ document.addEventListener("DOMContentLoaded", () => {
     
     // Start the cooldown ticker
     setInterval(updateCooldowns, 1000);
+    
+    // Hash-based routing for page tabs
+    function handleHashRoute() {
+        const hash = window.location.hash.replace('#', '');
+        if (hash === 'query' || hash === 'merge') {
+            switchHeaderTab(hash);
+        } else {
+            window.location.hash = 'query';
+        }
+    }
+    window.addEventListener("hashchange", handleHashRoute);
+    handleHashRoute();
 });
 
 // UI tab switching helper
@@ -1538,6 +1550,10 @@ let activeTab = 'query';
 function switchHeaderTab(tab) {
     if (activeTab === tab) return;
     activeTab = tab;
+    
+    if (window.location.hash.replace('#', '') !== tab) {
+        window.location.hash = tab;
+    }
     
     // Tab buttons
     document.querySelectorAll('.header-tab-btn').forEach(btn => btn.classList.remove('active'));
