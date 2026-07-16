@@ -321,10 +321,12 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
                 gcb_score = score
                 gcb_found = True
                 
-        # 2. İntaç Tarihi
-        elif any(k in hl for k in ["intaç", "kapanma", "intac", "kapanış", "kapanis"]):
+        # 2. İntaç / Beyanname Tarihi
+        elif any(k in hl for k in ["intaç", "kapanma", "intac", "kapanış", "kapanis", "tarih", "date", "tescil", "beyan"]):
             score = 1
-            if any(k in hl for k in ["gumruk intac", "intaç tarihi", "intac tarihi", "kapanis tarihi"]):
+            if any(k in hl for k in ["intaç tarihi", "intac tarihi", "kapanis tarihi", "tescil tarihi", "beyanname tarihi"]):
+                score = 3
+            elif any(k in hl for k in ["tarih", "date"]):
                 score = 2
             if score > date_score:
                 date_col_idx = idx
@@ -760,12 +762,13 @@ def get_merge_preview(session_id: str = None, beyan_dir: str = "", fatura_dir: s
         rows = res["rows"]
         
         # Group by GCB dynamically
-        gcb_groups = defaultdict(lambda: {"firma": "", "faturalar": []})
+        gcb_groups = defaultdict(lambda: {"firma": "", "faturalar": [], "date": ""})
         
         for item in rows:
             fatura_no = str(item.get("fatura") or "").strip()
             firma = str(item.get("firma") or "").strip()
             gcb = str(item.get("gcb") or "").strip()
+            date_val = str(item.get("date") or "").strip()
             
             if not fatura_no or not gcb or fatura_no == "None" or gcb == "None":
                 continue
@@ -773,6 +776,8 @@ def get_merge_preview(session_id: str = None, beyan_dir: str = "", fatura_dir: s
             if fatura_no not in gcb_groups[gcb]["faturalar"]:
                 gcb_groups[gcb]["faturalar"].append(fatura_no)
             gcb_groups[gcb]["firma"] = firma
+            if date_val:
+                gcb_groups[gcb]["date"] = date_val
             
         # Generate match preview list
         preview_data = []
@@ -841,7 +846,8 @@ def get_merge_preview(session_id: str = None, beyan_dir: str = "", fatura_dir: s
                 "beyan_pdf": gcb_pdf_info,
                 "fatura_pdfs": fatura_pdfs_list,
                 "status": status,
-                "target_filename": target_filename
+                "target_filename": target_filename,
+                "date": info["date"]
             })
             
         return JSONResponse(content={
@@ -1307,7 +1313,7 @@ async def run_pdf_merge_task(session_id: str, websocket: WebSocket, beyan_dir: s
                     "level": "success"
                 })
                 await websocket.send_json({"type": "merge_item_complete", "gcb": gcb, "status": "success", "output_name": target_filename})
-                created_files.append(output_path)
+                created_files.append((output_path, item.get("date", "")))
                 success_count += 1
             except Exception as e:
                 await websocket.send_json({
@@ -1328,11 +1334,46 @@ async def run_pdf_merge_task(session_id: str, websocket: WebSocket, beyan_dir: s
             await websocket.send_json({"type": "merge_log", "message": "[SİSTEM] Başarıyla birleştirilen belgeler ZIP arşivine sıkıştırılıyor...", "level": "info"})
             try:
                 import zipfile
-                def create_zip(z_path, files):
+                def create_zip(z_path, files_info):
                     with zipfile.ZipFile(z_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                        for fp in files:
+                        for fp, date_str in files_info:
                             if os.path.exists(fp):
-                                zipf.write(fp, os.path.basename(fp))
+                                folder_name = ""
+                                if date_str:
+                                    try:
+                                        if "-" in date_str:
+                                            parts = date_str.split("-")
+                                            if len(parts) >= 2:
+                                                if len(parts[0]) == 4:
+                                                    year, month = parts[0], parts[1]
+                                                else:
+                                                    year, month = parts[2], parts[1]
+                                        elif "." in date_str:
+                                            parts = date_str.split(".")
+                                            if len(parts) >= 2:
+                                                if len(parts[2]) == 4:
+                                                    year, month = parts[2], parts[1]
+                                                else:
+                                                    year, month = parts[0], parts[1]
+                                        else:
+                                            year, month = None, None
+                                            
+                                        if year and month:
+                                            months_tr = {
+                                                "01": "Ocak", "02": "Subat", "03": "Mart", "04": "Nisan",
+                                                "05": "Mayis", "06": "Haziran", "07": "Temmuz", "08": "Agustos",
+                                                "09": "Eylul", "10": "Ekim", "11": "Kasim", "12": "Aralik"
+                                            }
+                                            month_name = months_tr.get(month, month)
+                                            folder_name = f"{year}_{month}_{month_name}"
+                                    except Exception:
+                                        pass
+                                        
+                                if not folder_name:
+                                    folder_name = "Diger_Tarihsiz"
+                                    
+                                zip_path_in_archive = os.path.join(folder_name, os.path.basename(fp))
+                                zipf.write(fp, zip_path_in_archive)
                 
                 loop = asyncio.get_running_loop()
                 await loop.run_in_executor(None, create_zip, old_zip, created_files)
