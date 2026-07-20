@@ -463,19 +463,8 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
         if intac_str.lower() == "none": intac_str = ""
         if gcb_date_str.lower() == "none": gcb_date_str = ""
         
-        # Determine effective date for month classification
-        # Priority 1: GÇB Tarihi column
-        # Priority 2: İntaç Tarihi column
-        # Priority 3: Scan all row values for a valid date
+        # Determine effective date for month classification (EXCLUSIVELY GÇB Tarihi column)
         effective_date = gcb_date_str.strip()
-        if not effective_date:
-            effective_date = intac_str.strip()
-        if not effective_date:
-            for cell_val in row_values:
-                y, m = parse_date_to_year_month(cell_val)
-                if y and m:
-                    effective_date = str(cell_val).strip()
-                    break
         
         # Skip completely empty rows
         if not fatura.strip() and not firma.strip() and not gcb.strip():
