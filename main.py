@@ -261,7 +261,34 @@ def apply_table_formatting_to_sheet(ws):
         col_letter = get_column_letter(col_idx)
         ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
 
-# Robust line parser for custom paste strings (extracts only the GCB number)
+# Helper function to parse any date representation (string, datetime, etc.) into (YYYY, MM)
+def parse_date_to_year_month(val: Any) -> tuple:
+    if not val:
+        return None, None
+    if isinstance(val, (datetime, date)):
+        return f"{val.year:04d}", f"{val.month:02d}"
+    
+    val_str = str(val).strip()
+    if not val_str or val_str.lower() in ["none", "", "nan", "null"]:
+        return None, None
+        
+    # Match YYYY-MM-DD or YYYY/MM/DD or YYYY.MM.DD
+    m = re.search(r'(\d{4})[-./](\d{1,2})[-./](\d{1,2})', val_str)
+    if m:
+        return m.group(1), m.group(2).zfill(2)
+        
+    # Match DD.MM.YYYY or DD-MM-YYYY or DD/MM/YYYY
+    m = re.search(r'(\d{1,2})[-./](\d{1,2})[-./](\d{4})', val_str)
+    if m:
+        return m.group(3), m.group(2).zfill(2)
+
+    # Match YYYYMMDD
+    m = re.search(r'\b(20\d{2})(0[1-9]|1[0-2])([0-2][0-9]|3[01])\b', val_str)
+    if m:
+        return m.group(1), m.group(2)
+
+    return None, None
+
 def parse_custom_line(line: str):
     # Regex match GCB No: e.g. 26341200EX00137190 (8 digits, 2 letters, 6 to 8 digits)
     match = re.search(r'\d{8}[A-Za-z]{2}\d{6,8}', line)
@@ -294,21 +321,28 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
         h = str(ws.cell(row=1, column=c).value or "").strip()
         headers.append(h)
         
-    # Detect dynamic columns based on keywords with priority scoring to avoid wrong columns overwriting good ones
     gcb_found = False
-    date_found = False
+    gcb_date_found = False
+    intac_date_found = False
     fatura_found = False
     firma_found = False
     
-    fatura_score = 0
+    gcb_col_idx = 0
+    gcb_date_col_idx = 0
+    intac_date_col_idx = 0
+    fatura_col_idx = 0
+    firma_col_idx = 0
+    
     gcb_score = 0
+    gcb_date_score = 0
+    intac_date_score = 0
+    fatura_score = 0
     firma_score = 0
-    date_score = 0
     
     for idx, h in enumerate(headers, 1):
         hl = normalize_turkish(h)
         
-        # 1. Beyanname / GCB No
+        # 1. Beyanname / GCB No (must NOT contain tarih or date)
         if any(k in hl for k in ["beyanname", "gb no", "gb numara", "gcb", "güb", "gub", "gçb", "gcb no", "gçb no", "beyan no", "tescil no"]) and not any(k in hl for k in ["tarih", "date"]):
             score = 1
             if any(k in hl for k in ["gb no", "gcb no", "gb numarasi", "beyanname no", "gçb no"]):
@@ -321,20 +355,28 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
                 gcb_score = score
                 gcb_found = True
                 
-        # 2. İntaç / Beyanname Tarihi
-        elif any(k in hl for k in ["intaç", "kapanma", "intac", "kapanış", "kapanis", "tarih", "date", "tescil", "beyan"]):
-            score = 1
-            if any(k in hl for k in ["intaç tarihi", "intac tarihi", "kapanis tarihi", "tescil tarihi", "beyanname tarihi"]):
+        # 2. GÇB / Beyanname Tarihi (Declaration Date)
+        if any(k in hl for k in ["gçb tarih", "gcb tarih", "gb tarih", "beyanname tarih", "beyan tarih", "tescil tarih"]) or (any(k in hl for k in ["gçb", "gcb", "gb", "beyan"]) and any(k in hl for k in ["tarih", "date"])):
+            score = 2
+            if any(k in hl for k in ["gçb tarihi", "gcb tarihi", "gb tarihi", "beyanname tarihi", "tescil tarihi"]):
                 score = 3
-            elif any(k in hl for k in ["tarih", "date"]):
-                score = 2
-            if score > date_score:
-                date_col_idx = idx
-                date_score = score
-                date_found = True
-                
-        # 3. Fatura No (Highest priority for e-arşiv, e-fatura)
-        elif any(k in hl for k in ["fatura", "invoice"]):
+            if score > gcb_date_score:
+                gcb_date_col_idx = idx
+                gcb_date_score = score
+                gcb_date_found = True
+
+        # 3. İntaç Tarihi (Customs Clearance Date)
+        if any(k in hl for k in ["intaç", "intac", "kapanma", "kapanış", "kapanis"]):
+            score = 2
+            if any(k in hl for k in ["gümrük intaç tarihi", "intaç tarihi", "intac tarihi", "kapanis tarihi"]):
+                score = 3
+            if score > intac_date_score:
+                intac_date_col_idx = idx
+                intac_date_score = score
+                intac_date_found = True
+
+        # 4. Fatura No (Highest priority for e-arşiv, e-fatura)
+        if any(k in hl for k in ["fatura", "invoice"]):
             score = 0
             if any(k in hl for k in ["e-arsiv", "e-arşiv", "e-fatura", "e-invoice"]):
                 score = 3
@@ -348,8 +390,8 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
                 fatura_score = score
                 fatura_found = True
                 
-        # 4. Firma Adı
-        elif any(k in hl for k in ["firma", "ad 1", "müşteri", "alıcı", "unvan", "title", "company", "firma adi", "firma adı"]):
+        # 5. Firma Adı
+        if any(k in hl for k in ["firma", "ad 1", "müşteri", "alıcı", "unvan", "title", "company", "firma adi", "firma adı"]):
             score = 1
             if any(k in hl for k in ["firma adi", "firma adı", "unvan", "company name"]):
                 score = 3
@@ -361,25 +403,40 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
                 firma_score = score
                 firma_found = True
 
-    # If no İntaç Date column was found, automatically append it!
-    if not date_found and file_path and os.path.exists(file_path):
-        try:
-            wb_write = openpyxl.load_workbook(file_path)
-            ws_write = wb_write.active
-            new_col_idx = len(headers) + 1
-            ws_write.cell(row=1, column=new_col_idx, value="Gümrük İntaç Tarihi")
-            
-            # Format table including new column
-            apply_table_formatting_to_sheet(ws_write)
-            
-            wb_write.save(file_path)
-            wb_write.close()
-            
-            headers.append("Gümrük İntaç Tarihi")
-            date_col_idx = new_col_idx
-            date_found = True
-        except Exception as e:
-            print("Warning: Could not automatically append date column:", e)
+    # Fallback for GÇB Tarihi if not found by keywords, but column right after GÇB NO has "tarih" or "date"
+    if not gcb_date_found and gcb_col_idx > 0 and gcb_col_idx < len(headers):
+        next_hl = normalize_turkish(headers[gcb_col_idx]) # index gcb_col_idx is col idx+1
+        if any(k in next_hl for k in ["tarih", "date"]):
+            gcb_date_col_idx = gcb_col_idx + 1
+            gcb_date_found = True
+
+    # Fallback default column indices if detection failed
+    if not gcb_col_idx: gcb_col_idx = 9
+    if not fatura_col_idx: fatura_col_idx = 1
+    if not firma_col_idx: firma_col_idx = 3
+
+    # Handle İntaç Tarihi output column for scraper writing
+    if intac_date_found:
+        date_col_idx = intac_date_col_idx
+    elif gcb_date_found and not intac_date_found:
+        date_col_idx = gcb_date_col_idx
+    else:
+        # If no İntaç Date column was found, automatically append it!
+        if file_path and os.path.exists(file_path):
+            try:
+                wb_write = openpyxl.load_workbook(file_path)
+                ws_write = wb_write.active
+                new_col_idx = len(headers) + 1
+                ws_write.cell(row=1, column=new_col_idx, value="Gümrük İntaç Tarihi")
+                apply_table_formatting_to_sheet(ws_write)
+                wb_write.save(file_path)
+                wb_write.close()
+                headers.append("Gümrük İntaç Tarihi")
+                date_col_idx = new_col_idx
+            except Exception as e:
+                print("Warning: Could not automatically append date column:", e)
+        else:
+            date_col_idx = 12
               
     rows = []
     for r in range(2, ws.max_row + 1):
@@ -393,15 +450,32 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
             else:
                 row_values.append(str(val).strip())
                 
-        fatura = row_values[fatura_col_idx - 1] if fatura_found and 0 < fatura_col_idx <= len(row_values) else ""
-        firma = row_values[firma_col_idx - 1] if firma_found and 0 < firma_col_idx <= len(row_values) else ""
-        gcb = row_values[gcb_col_idx - 1] if gcb_found and 0 < gcb_col_idx <= len(row_values) else ""
-        intac_str = row_values[date_col_idx - 1] if date_found and 0 < date_col_idx <= len(row_values) else ""
+        fatura = row_values[fatura_col_idx - 1] if fatura_col_idx > 0 and fatura_col_idx <= len(row_values) else ""
+        firma = row_values[firma_col_idx - 1] if firma_col_idx > 0 and firma_col_idx <= len(row_values) else ""
+        gcb = row_values[gcb_col_idx - 1] if gcb_col_idx > 0 and gcb_col_idx <= len(row_values) else ""
+        intac_str = row_values[date_col_idx - 1] if date_col_idx > 0 and date_col_idx <= len(row_values) else ""
         
+        gcb_date_str = row_values[gcb_date_col_idx - 1] if gcb_date_col_idx > 0 and gcb_date_col_idx <= len(row_values) else ""
+
         if fatura.lower() == "none": fatura = ""
         if firma.lower() == "none": firma = ""
         if gcb.lower() == "none": gcb = ""
         if intac_str.lower() == "none": intac_str = ""
+        if gcb_date_str.lower() == "none": gcb_date_str = ""
+        
+        # Determine effective date for month classification
+        # Priority 1: GÇB Tarihi column
+        # Priority 2: İntaç Tarihi column
+        # Priority 3: Scan all row values for a valid date
+        effective_date = gcb_date_str.strip()
+        if not effective_date:
+            effective_date = intac_str.strip()
+        if not effective_date:
+            for cell_val in row_values:
+                y, m = parse_date_to_year_month(cell_val)
+                if y and m:
+                    effective_date = str(cell_val).strip()
+                    break
         
         # Skip completely empty rows
         if not fatura.strip() and not firma.strip() and not gcb.strip():
@@ -417,6 +491,8 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
             "firma": firma,
             "gcb": gcb,
             "intac": intac_str,
+            "gcb_date": gcb_date_str,
+            "date": effective_date,
             "status": status,
             "values": row_values
         })
@@ -1339,35 +1415,15 @@ async def run_pdf_merge_task(session_id: str, websocket: WebSocket, beyan_dir: s
                         for fp, date_str in files_info:
                             if os.path.exists(fp):
                                 folder_name = ""
-                                if date_str:
-                                    try:
-                                        if "-" in date_str:
-                                            parts = date_str.split("-")
-                                            if len(parts) >= 2:
-                                                if len(parts[0]) == 4:
-                                                    year, month = parts[0], parts[1]
-                                                else:
-                                                    year, month = parts[2], parts[1]
-                                        elif "." in date_str:
-                                            parts = date_str.split(".")
-                                            if len(parts) >= 2:
-                                                if len(parts[2]) == 4:
-                                                    year, month = parts[2], parts[1]
-                                                else:
-                                                    year, month = parts[0], parts[1]
-                                        else:
-                                            year, month = None, None
-                                            
-                                        if year and month:
-                                            months_tr = {
-                                                "01": "Ocak", "02": "Subat", "03": "Mart", "04": "Nisan",
-                                                "05": "Mayis", "06": "Haziran", "07": "Temmuz", "08": "Agustos",
-                                                "09": "Eylul", "10": "Ekim", "11": "Kasim", "12": "Aralik"
-                                            }
-                                            month_name = months_tr.get(month, month)
-                                            folder_name = f"{year}_{month}_{month_name}"
-                                    except Exception:
-                                        pass
+                                year, month = parse_date_to_year_month(date_str)
+                                if year and month:
+                                    months_tr = {
+                                        "01": "Ocak", "02": "Subat", "03": "Mart", "04": "Nisan",
+                                        "05": "Mayis", "06": "Haziran", "07": "Temmuz", "08": "Agustos",
+                                        "09": "Eylul", "10": "Ekim", "11": "Kasim", "12": "Aralik"
+                                    }
+                                    month_name = months_tr.get(month, month)
+                                    folder_name = f"{year}_{month}_{month_name}"
                                         
                                 if not folder_name:
                                     folder_name = "Diger_Tarihsiz"
