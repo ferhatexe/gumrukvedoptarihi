@@ -394,23 +394,15 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
             gcb_date_col_idx = gcb_col_idx + 1
             gcb_date_found = True
 
-    # Fallback default column indices if detection failed
-    if not gcb_col_idx: gcb_col_idx = 9
-    if not fatura_col_idx: fatura_col_idx = 1
-    if not firma_col_idx: firma_col_idx = 3
-
-    need_save = False
-    # Handle İntaç Tarihi output column for scraper writing
-    if intac_date_found:
-        date_col_idx = intac_date_col_idx
-    else:
-        # If no explicit İntaç Date column was found, automatically append it to ws directly!
-        new_col_idx = len(headers) + 1
-        ws.cell(row=1, column=new_col_idx, value="Gümrük İntaç Tarihi")
-        headers.append("Gümrük İntaç Tarihi")
-        date_col_idx = new_col_idx
-        need_save = True
-              
+    # Ensure Gümrük İntaç Tarihi column exists on disk and gets highlighted
+    date_col_idx = ensure_intac_column(file_path)
+    
+    # Reload workbook after column assurance
+    wb = openpyxl.load_workbook(file_path)
+    ws = wb.active
+    
+    headers = [str(ws.cell(row=1, column=c).value or "").strip() for c in range(1, ws.max_column + 1)]
+    
     rows = []
     for r in range(2, ws.max_row + 1):
         row_values = []
@@ -458,13 +450,6 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
             "values": row_values
         })
         
-    if need_save:
-        try:
-            apply_table_formatting_to_sheet(ws)
-            wb.save(file_path)
-        except Exception as ex:
-            print("Error saving appended column in read_excel_data:", ex)
-            
     wb.close()
     return {
         "headers": headers, 
@@ -476,6 +461,54 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
     }
 
 excel_global_lock = threading.Lock()
+
+def ensure_intac_column(file_path: str) -> int:
+    if not file_path or not os.path.exists(file_path):
+        return 12
+    with excel_global_lock:
+        try:
+            wb = openpyxl.load_workbook(file_path)
+            ws = wb.active
+            max_col = ws.max_column
+            headers = [str(ws.cell(row=1, column=c).value or "").strip() for c in range(1, max_col + 1)]
+            
+            # Check if an explicit İntaç Tarihi column already exists
+            intac_col_idx = 0
+            for idx, h in enumerate(headers, 1):
+                hl = normalize_turkish(h)
+                if any(k in hl for k in ["gümrük intaç tarihi", "intaç tarihi", "intac tarihi", "kapanis tarihi", "kapanış tarihi"]):
+                    intac_col_idx = idx
+                    break
+                elif any(k in hl for k in ["intaç", "intac", "kapanma", "kapanış", "kapanis"]):
+                    intac_col_idx = idx
+                    break
+                    
+            if not intac_col_idx:
+                # Append brand new column "Gümrük İntaç Tarihi" at the end of the table
+                intac_col_idx = len(headers) + 1
+                header_cell = ws.cell(row=1, column=intac_col_idx, value="Gümrük İntaç Tarihi")
+            else:
+                header_cell = ws.cell(row=1, column=intac_col_idx)
+                if not header_cell.value:
+                    header_cell.value = "Gümrük İntaç Tarihi"
+                    
+            # Highlight column header with bright soft green fill & dark green bold text so it stands out
+            try:
+                header_cell.fill = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")
+                header_cell.font = Font(name="Calibri", size=11, bold=True, color="065F46")
+                header_cell.alignment = Alignment(horizontal="center", vertical="center")
+            except Exception:
+                pass
+                
+            col_letter = get_column_letter(intac_col_idx)
+            ws.column_dimensions[col_letter].width = 22
+            
+            wb.save(file_path)
+            wb.close()
+            return intac_col_idx
+        except Exception as e:
+            print(f"[EXCEL SÜTUN OLUŞTURMA HATASI]: {e}")
+            return 12
 
 def save_intac_date_to_excel(excel_path: str, row_idx: int, col_idx: int, val_to_write: Any):
     if not excel_path or not os.path.exists(excel_path):
@@ -489,6 +522,12 @@ def save_intac_date_to_excel(excel_path: str, row_idx: int, col_idx: int, val_to
             header_cell = ws.cell(row=1, column=col_idx)
             if not header_cell.value or str(header_cell.value).strip() == "":
                 header_cell.value = "Gümrük İntaç Tarihi"
+            try:
+                header_cell.fill = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")
+                header_cell.font = Font(name="Calibri", size=11, bold=True, color="065F46")
+                header_cell.alignment = Alignment(horizontal="center", vertical="center")
+            except Exception:
+                pass
                 
             cell = ws.cell(row=row_idx, column=col_idx, value=val_to_write)
             if isinstance(val_to_write, (date, datetime)):
@@ -617,16 +656,6 @@ def get_data(session_id: str = None):
                 "firma_col_idx": 3,
                 "active_file": None
             })
-        
-        # Ensure active excel file is formatted properly
-        try:
-            wb_write = openpyxl.load_workbook(session.active_excel_path)
-            ws_write = wb_write.active
-            apply_table_formatting_to_sheet(ws_write)
-            wb_write.save(session.active_excel_path)
-            wb_write.close()
-        except Exception as ex:
-            print("Error formatting excel file on data load:", ex)
             
         res = read_excel_data(session.active_excel_path)
         session.gcb_col_idx = res["gcb_col_idx"]
@@ -659,16 +688,6 @@ async def upload_file(session_id: str = None, file: UploadFile = File(...)):
         with open(save_path, "wb") as f:
             f.write(content)
         session.active_excel_path = save_path
-        
-        # Ensure active excel file is formatted properly
-        try:
-            wb_write = openpyxl.load_workbook(session.active_excel_path)
-            ws_write = wb_write.active
-            apply_table_formatting_to_sheet(ws_write)
-            wb_write.save(session.active_excel_path)
-            wb_write.close()
-        except Exception as ex:
-            print("Error formatting excel file on upload:", ex)
             
         res = read_excel_data(session.active_excel_path)
         session.gcb_col_idx = res["gcb_col_idx"]
