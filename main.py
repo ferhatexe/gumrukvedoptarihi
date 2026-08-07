@@ -189,27 +189,9 @@ def apply_table_formatting_to_sheet(ws):
     if max_row < 1 or max_col < 1:
         return
 
-    # Clear existing tables first to prevent overlaps/errors
-    if hasattr(ws, '_tables'):
-        ws._tables.clear()
-    ws.auto_filter.ref = None
-
-    # Define the Table range
+    # Enable native auto filter on header row without creating corrupting openpyxl Table objects
     ref = f"A1:{get_column_letter(max_col)}{max_row}"
-    
-    # Create the Table object
-    tab = Table(displayName="GumrukSorguTablosu", ref=ref)
-    
-    # Style: TableStyleMedium2 (Standard Excel blue theme with header and striped rows)
-    style = TableStyleInfo(
-        name="TableStyleMedium2",
-        showFirstColumn=False,
-        showLastColumn=False,
-        showRowStripes=True,
-        showColumnStripes=False
-    )
-    tab.tableStyleInfo = style
-    ws.add_table(tab)
+    ws.auto_filter.ref = ref
     
     # Alignments
     center_align = Alignment(horizontal="center", vertical="center")
@@ -419,10 +401,8 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
     # Handle İntaç Tarihi output column for scraper writing
     if intac_date_found:
         date_col_idx = intac_date_col_idx
-    elif gcb_date_found and not intac_date_found:
-        date_col_idx = gcb_date_col_idx
     else:
-        # If no İntaç Date column was found, automatically append it!
+        # If no explicit İntaç Date column was found, automatically append it!
         if file_path and os.path.exists(file_path):
             try:
                 wb_write = openpyxl.load_workbook(file_path)
@@ -436,6 +416,7 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
                 date_col_idx = new_col_idx
             except Exception as e:
                 print("Warning: Could not automatically append date column:", e)
+                date_col_idx = len(headers) + 1
         else:
             date_col_idx = 12
               
@@ -1031,22 +1012,21 @@ async def run_scraper_task(session_id: str, websocket: WebSocket, rows_to_query:
                 
                 if result.get("success") and result.get("date"):
                     try:
-                        date_obj = datetime.strptime(result["date"], "%Y-%m-%d").date()
+                        date_str = result["date"]
+                        try:
+                            val_to_write = datetime.strptime(date_str, "%Y-%m-%d").date()
+                        except Exception:
+                            val_to_write = date_str
+                            
                         with excel_lock:
-                            # Determine date format dynamically from other date columns if not set
-                            target_format = 'yyyy-mm-dd'
-                            for col in range(1, ws.max_column + 1):
-                                if col != session.date_col_idx:
-                                    fmt = ws.cell(row=row_idx, column=col).number_format
-                                    if fmt and any(c in fmt.lower() for c in ['y', 'm', 'd']):
-                                        target_format = fmt
-                                        break
+                            cell = ws.cell(row=row_idx, column=session.date_col_idx, value=val_to_write)
+                            if isinstance(val_to_write, (date, datetime)):
+                                cell.number_format = 'dd.mm.yyyy'
+                            else:
+                                cell.number_format = '@'
+                            cell.alignment = Alignment(horizontal="center", vertical="center")
                             
-                            cell = ws.cell(row=row_idx, column=session.date_col_idx, value=date_obj)
-                            cell.number_format = target_format
-                            
-                            # Save progress to disk immediately on success to ensure log and file are in sync
-                            apply_table_formatting_to_sheet(ws)
+                            # Save progress to disk immediately on success
                             wb.save(excel_path)
                                 
                         ws_send({"type": "row_success", "row": row_idx, "gcb": gcb_no, "date": result["date"]})
@@ -1059,7 +1039,7 @@ async def run_scraper_task(session_id: str, websocket: WebSocket, rows_to_query:
                         with excel_lock:
                             cell = ws.cell(row=row_idx, column=session.date_col_idx, value="Beyan No Hatalı")
                             cell.number_format = '@'  # Text format
-                            apply_table_formatting_to_sheet(ws)
+                            cell.alignment = Alignment(horizontal="center", vertical="center")
                             wb.save(excel_path)
                         ws_send({"type": "row_invalid_gcb", "row": row_idx, "gcb": gcb_no, "message": result.get("message", "Beyanname bulunamadı.")})
                     except Exception as e:
