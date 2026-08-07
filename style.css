@@ -1817,6 +1817,16 @@ body {
     100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); background-color: var(--amber-bg); }
 }
 
+.gcb-val-text {
+    cursor: pointer;
+    user-select: text;
+    transition: color 0.15s ease;
+}
+.gcb-val-text:hover {
+    color: var(--accent-red);
+    text-decoration: underline;
+}
+
 .tag-etgb {
     display: inline-flex;
     align-items: center;

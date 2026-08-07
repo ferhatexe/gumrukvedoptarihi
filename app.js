@@ -883,19 +883,19 @@ function renderTable(rows) {
         const isETGB = gcbStr.length === 16;
         let typeBadge = "";
         if (isETGB) {
-            typeBadge = ' <span class="tag-etgb">ETGB</span>';
+            typeBadge = '<span class="tag-etgb">ETGB</span>';
         } else if (gcbStr.length >= 18) {
             const typeCode = gcbStr.substring(8, 10);
             if (typeCode === "EX") {
-                typeBadge = ' <span class="tag-ihracat">EX</span>';
+                typeBadge = '<span class="tag-ihracat">EX</span>';
             } else if (typeCode === "IM") {
-                typeBadge = ' <span class="tag-ithalat">IM</span>';
+                typeBadge = '<span class="tag-ithalat">IM</span>';
             } else if (typeCode === "AN") {
-                typeBadge = ' <span class="tag-antrepo">AN</span>';
+                typeBadge = '<span class="tag-antrepo">AN</span>';
             } else if (typeCode === "TR") {
-                typeBadge = ' <span class="tag-transit">TR</span>';
+                typeBadge = '<span class="tag-transit">TR</span>';
             } else if (typeCode === "EU") {
-                typeBadge = ' <span class="tag-transit-eu">EU</span>';
+                typeBadge = '<span class="tag-transit-eu">EU</span>';
             }
         }
         
@@ -930,7 +930,8 @@ function renderTable(rows) {
                 const isAnyDateCol = headerName.includes("tarih") || headerName.includes("date");
                 
                 if (isGcbCol) {
-                    rowHtml += `<td class="font-mono"><strong>${val || "-"}</strong>${typeBadge}</td>`;
+                    const cleanGcbVal = (val || "-").trim();
+                    rowHtml += `<td class="font-mono"><strong class="gcb-val-text" onclick="copyGcbText('${cleanGcbVal}', event)" title="Tıklayarak kopyala">${cleanGcbVal}</strong>${typeBadge}</td>`;
                 } else if (isDateCol) {
                     rowHtml += `<td id="date-${item.row}" class="font-mono">${formatDate(state.intac || val) || "-"}</td>`;
                 } else if (isAnyDateCol) {
@@ -945,9 +946,10 @@ function renderTable(rows) {
             });
         } else {
             // Fallback to static columns if row values array is missing
+            const cleanGcbVal = (item.gcb || "-").trim();
             rowHtml += `<td class="font-mono">${item.fatura || "-"}</td>`;
             rowHtml += `<td title="${item.firma}">${item.firma ? truncate(item.firma, 35) : "-"}</td>`;
-            rowHtml += `<td class="font-mono"><strong>${item.gcb || "-"}</strong>${typeBadge}</td>`;
+            rowHtml += `<td class="font-mono"><strong class="gcb-val-text" onclick="copyGcbText('${cleanGcbVal}', event)" title="Tıklayarak kopyala">${cleanGcbVal}</strong>${typeBadge}</td>`;
             rowHtml += `<td id="date-${item.row}" class="font-mono">${formatDate(state.intac) || "-"}</td>`;
         }
         
@@ -1735,7 +1737,8 @@ function renderMergePreviewTable(items) {
         // GCB cell
         const tdGcb = document.createElement("td");
         tdGcb.className = "font-mono";
-        tdGcb.innerHTML = `<strong>${item.gcb}</strong>`;
+        const cleanMergeGcb = (item.gcb || "-").trim();
+        tdGcb.innerHTML = `<strong class="gcb-val-text" onclick="copyGcbText('${cleanMergeGcb}', event)" title="Tıklayarak kopyala">${cleanMergeGcb}</strong>`;
         
         // Company name cell
         const tdFirma = document.createElement("td");
@@ -1986,4 +1989,65 @@ function filterMergeTable() {
             row.style.display = "none";
         }
     });
+}
+
+// Copy GCB Text without trailing space
+function copyGcbText(text, event) {
+    if (event) event.stopPropagation();
+    const clean = (text || "").trim();
+    if (!clean || clean === "-") return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(clean).then(() => {
+            showCopyToast(`Kopyalandı: ${clean}`);
+        }).catch(() => {
+            fallbackCopy(clean);
+        });
+    } else {
+        fallbackCopy(clean);
+    }
+}
+
+function fallbackCopy(text) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+        document.execCommand("copy");
+        showCopyToast(`Kopyalandı: ${text}`);
+    } catch(e) {}
+    document.body.removeChild(ta);
+}
+
+function showCopyToast(msg) {
+    let toast = document.getElementById("copy-toast");
+    if (!toast) {
+        toast = document.createElement("div");
+        toast.id = "copy-toast";
+        toast.style.position = "fixed";
+        toast.style.bottom = "24px";
+        toast.style.right = "24px";
+        toast.style.background = "#0f172a";
+        toast.style.color = "#ffffff";
+        toast.style.padding = "10px 18px";
+        toast.style.borderRadius = "8px";
+        toast.style.boxShadow = "0 10px 25px rgba(0,0,0,0.25)";
+        toast.style.fontSize = "0.82rem";
+        toast.style.fontFamily = "var(--font-sans)";
+        toast.style.fontWeight = "600";
+        toast.style.zIndex = "99999";
+        toast.style.transition = "all 0.3s cubic-bezier(0.16, 1, 0.3, 1)";
+        toast.style.pointerEvents = "none";
+        document.body.appendChild(toast);
+    }
+    toast.innerText = msg;
+    toast.style.opacity = "1";
+    toast.style.transform = "translateY(0)";
+    clearTimeout(window._copyToastTimer);
+    window._copyToastTimer = setTimeout(() => {
+        toast.style.opacity = "0";
+        toast.style.transform = "translateY(10px)";
+    }, 2000);
 }

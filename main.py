@@ -90,6 +90,7 @@ class UserSessionState:
     def __init__(self, session_id: str):
         self.session_id = session_id
         self.active_excel_path = None
+        self.original_filename = None
         self.gcb_col_idx = 9
         self.date_col_idx = 12
         self.fatura_col_idx = 1
@@ -583,6 +584,12 @@ def get_css():
 def get_js():
     return FileResponse("app.js", media_type="application/javascript")
 
+@app.get("/logo.png")
+def get_logo():
+    if os.path.exists("logo.png"):
+        return FileResponse("logo.png", media_type="image/png")
+    return JSONResponse(status_code=404, content={"message": "Logo not found"})
+
 @app.get("/api/data")
 def get_data(session_id: str = None):
     session = get_session(session_id)
@@ -633,6 +640,7 @@ async def upload_file(session_id: str = None, file: UploadFile = File(...)):
     session = get_session(session_id)
     try:
         content = await file.read()
+        session.original_filename = file.filename
         # Prepend session_id to file name to isolate user uploads
         filename = f"{session.session_id}_{file.filename}"
         save_path = get_writable_path(BASE_DIR, filename)
@@ -674,8 +682,10 @@ async def upload_file(session_id: str = None, file: UploadFile = File(...)):
 def download_file(session_id: str = None):
     session = get_session(session_id)
     if session.active_excel_path and os.path.exists(session.active_excel_path):
-        filename = "EXPORT_UPDATED.XLSX"
-        return FileResponse(session.active_excel_path, filename=filename, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        raw_name = session.original_filename or get_display_filename(session) or "EXPORT.XLSX"
+        base, _ = os.path.splitext(raw_name)
+        download_filename = f"{base}_GUNCEL.xlsx"
+        return FileResponse(session.active_excel_path, filename=download_filename, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     return JSONResponse(status_code=404, content={"success": False, "message": "Excel dosyası bulunamadı veya bağlantı kesildi."})
 
 @app.get("/api/merge/download")
@@ -1488,10 +1498,11 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str = None):
                 session.bypass = payload.get("bypass", False)
                 res = read_excel_data(session.active_excel_path)
                 excel_rows = res["rows"]
-                pending = [r for r in excel_rows if not r["intac"] and r["gcb"]]
+                # Query EVERY row that has a GCB number (do not skip rows with existing intaç dates)
+                pending = [r for r in excel_rows if r.get("gcb")]
                 
                 if not pending:
-                    await websocket.send_json({"type": "log", "message": "Sorgulanacak yeni (intacı olmayan) beyanname bulunamadı."})
+                    await websocket.send_json({"type": "log", "message": "Sorgulanacak beyanname numarası bulunamadı."})
                     await websocket.send_json({"type": "finished"})
                     continue
                 
