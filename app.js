@@ -2,6 +2,7 @@ class SoundEngine {
     constructor() {
         this.ctx = null;
         this.initialized = false;
+        this.isMuted = localStorage.getItem("gumruk_sound_muted") === "true";
     }
     
     init() {
@@ -14,8 +15,39 @@ class SoundEngine {
             console.warn("[SES] Web Audio API not supported or blocked:", e);
         }
     }
+
+    toggleMute() {
+        this.isMuted = !this.isMuted;
+        localStorage.setItem("gumruk_sound_muted", this.isMuted ? "true" : "false");
+        this.updateUI();
+        return this.isMuted;
+    }
+
+    updateUI() {
+        const btn = document.getElementById("btn-toggle-sound");
+        const iconOn = document.getElementById("sound-icon-on");
+        const iconOff = document.getElementById("sound-icon-off");
+        const label = document.getElementById("sound-toggle-label");
+        
+        if (!btn || !iconOn || !iconOff || !label) return;
+        
+        if (this.isMuted) {
+            btn.classList.add("muted");
+            iconOn.style.display = "none";
+            iconOff.style.display = "inline-block";
+            label.innerText = "Ses Kapalı";
+            btn.title = "Sesi Aç";
+        } else {
+            btn.classList.remove("muted");
+            iconOn.style.display = "inline-block";
+            iconOff.style.display = "none";
+            label.innerText = "Ses Açık";
+            btn.title = "Sesi Kapat";
+        }
+    }
     
     playSuccess() {
+        if (this.isMuted) return;
         this.init();
         if (!this.ctx) return;
         const now = this.ctx.currentTime;
@@ -40,6 +72,7 @@ class SoundEngine {
     }
     
     playNotClosed() {
+        if (this.isMuted) return;
         this.init();
         if (!this.ctx) return;
         const now = this.ctx.currentTime;
@@ -64,6 +97,7 @@ class SoundEngine {
     }
     
     playError() {
+        if (this.isMuted) return;
         this.init();
         if (!this.ctx) return;
         const now = this.ctx.currentTime;
@@ -88,6 +122,7 @@ class SoundEngine {
     }
     
     playUploadSuccess() {
+        if (this.isMuted) return;
         this.init();
         if (!this.ctx) return;
         const now = this.ctx.currentTime;
@@ -109,6 +144,7 @@ class SoundEngine {
     }
 
     playReset() {
+        if (this.isMuted) return;
         this.init();
         if (!this.ctx) return;
         const now = this.ctx.currentTime;
@@ -134,6 +170,10 @@ class SoundEngine {
 }
 
 const soundEngine = new SoundEngine();
+
+function toggleAppSound() {
+    soundEngine.toggleMute();
+}
 
 let socket = null;
 let heartbeatInterval = null;
@@ -262,6 +302,7 @@ const tabButtons = document.querySelectorAll(".panel-tab-btn");
 
 // Init
 document.addEventListener("DOMContentLoaded", () => {
+    soundEngine.updateUI();
     loadExcelData();
     connectWebSocket();
     setupFileUpload();
