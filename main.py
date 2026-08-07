@@ -475,6 +475,38 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
         "firma_col_idx": firma_col_idx
     }
 
+excel_global_lock = threading.Lock()
+
+def save_intac_date_to_excel(excel_path: str, row_idx: int, col_idx: int, val_to_write: Any):
+    if not excel_path or not os.path.exists(excel_path):
+        return
+    with excel_global_lock:
+        try:
+            wb = openpyxl.load_workbook(excel_path)
+            ws = wb.active
+            
+            # Ensure the target column has header "Gümrük İntaç Tarihi" on row 1
+            header_cell = ws.cell(row=1, column=col_idx)
+            if not header_cell.value or str(header_cell.value).strip() == "":
+                header_cell.value = "Gümrük İntaç Tarihi"
+                
+            cell = ws.cell(row=row_idx, column=col_idx, value=val_to_write)
+            if isinstance(val_to_write, (date, datetime)):
+                cell.number_format = 'dd.mm.yyyy'
+            else:
+                cell.number_format = '@'
+                
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            
+            # Set column width
+            col_letter = get_column_letter(col_idx)
+            ws.column_dimensions[col_letter].width = 22
+            
+            wb.save(excel_path)
+            wb.close()
+        except Exception as e:
+            print(f"[EXCEL YAZMA HATASI] (Satır {row_idx}, Sütun {col_idx}): {e}")
+
 def get_writable_path(base_dir: str, filename: str) -> str:
     name, ext = os.path.splitext(filename)
     safe_name = "".join([c for c in name if c.isalpha() or c.isdigit() or c in ['_', '-']]).strip()
@@ -1020,17 +1052,7 @@ async def run_scraper_task(session_id: str, websocket: WebSocket, rows_to_query:
                         except Exception:
                             val_to_write = date_str
                             
-                        with excel_lock:
-                            cell = ws.cell(row=row_idx, column=session.date_col_idx, value=val_to_write)
-                            if isinstance(val_to_write, (date, datetime)):
-                                cell.number_format = 'dd.mm.yyyy'
-                            else:
-                                cell.number_format = '@'
-                            cell.alignment = Alignment(horizontal="center", vertical="center")
-                            
-                            # Save progress to disk immediately on success
-                            wb.save(excel_path)
-                                
+                        save_intac_date_to_excel(excel_path, row_idx, session.date_col_idx, val_to_write)
                         ws_send({"type": "row_success", "row": row_idx, "gcb": gcb_no, "date": result["date"]})
                     except Exception as e:
                         ws_send({"type": "row_fail", "row": row_idx, "gcb": gcb_no, "message": f"Excel yazma hatası: {str(e)}"})
@@ -1038,11 +1060,7 @@ async def run_scraper_task(session_id: str, websocket: WebSocket, rows_to_query:
                     ws_send({"type": "row_not_closed", "row": row_idx, "gcb": gcb_no, "message": result.get("message", "Beyanname kapanmamış.")})
                 elif result.get("status") == "Sistem Uyarısı":
                     try:
-                        with excel_lock:
-                            cell = ws.cell(row=row_idx, column=session.date_col_idx, value="Beyan No Hatalı")
-                            cell.number_format = '@'  # Text format
-                            cell.alignment = Alignment(horizontal="center", vertical="center")
-                            wb.save(excel_path)
+                        save_intac_date_to_excel(excel_path, row_idx, session.date_col_idx, "Beyan No Hatalı")
                         ws_send({"type": "row_invalid_gcb", "row": row_idx, "gcb": gcb_no, "message": result.get("message", "Beyanname bulunamadı.")})
                     except Exception as e:
                         ws_send({"type": "row_fail", "row": row_idx, "gcb": gcb_no, "message": f"Excel yazma hatası: {str(e)}"})
