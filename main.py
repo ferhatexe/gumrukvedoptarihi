@@ -295,7 +295,7 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
             "firma_col_idx": firma_col_idx
         }
     
-    wb = openpyxl.load_workbook(file_path, data_only=True)
+    wb = openpyxl.load_workbook(file_path)
     ws = wb.active
     
     # Read headers from row 1
@@ -322,23 +322,24 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
     fatura_score = 0
     firma_score = 0
     
-    for idx, h in enumerate(headers, 1):
-        hl = normalize_turkish(h)
+    for idx, header_text in enumerate(headers, 1):
+        hl = normalize_turkish(header_text)
         
-        # 1. Beyanname / GCB No (must NOT contain tarih or date)
-        if any(k in hl for k in ["beyanname", "gb no", "gb numara", "gcb", "güb", "gub", "gçb", "gcb no", "gçb no", "beyan no", "tescil no"]) and not any(k in hl for k in ["tarih", "date"]):
-            score = 1
-            if any(k in hl for k in ["gb no", "gcb no", "gb numarasi", "beyanname no", "gçb no"]):
-                score = 3
-            elif any(k in hl for k in ["gcb", "gçb", "beyanname"]):
-                score = 2
-            
+        # 1. GÇB No
+        if any(k in hl for k in ["gçb no", "gcb no", "gb no", "beyanname no", "beyan no", "gçb numara", "gcb numara", "tescil no"]):
+            score = 3
+            if score > gcb_score:
+                gcb_col_idx = idx
+                gcb_score = score
+                gcb_found = True
+        elif any(k in hl for k in ["gçb", "gcb", "gb", "beyanname", "tescil"]) and not any(k in hl for k in ["tarih", "date", "kod", "tutar"]):
+            score = 2
             if score > gcb_score:
                 gcb_col_idx = idx
                 gcb_score = score
                 gcb_found = True
                 
-        # 2. GÇB / Beyanname Tarihi (Declaration Date)
+        # 2. GÇB Tarihi
         if any(k in hl for k in ["gçb tarih", "gcb tarih", "gb tarih", "beyanname tarih", "beyan tarih", "tescil tarih"]) or (any(k in hl for k in ["gçb", "gcb", "gb", "beyan"]) and any(k in hl for k in ["tarih", "date"])):
             score = 2
             if any(k in hl for k in ["gçb tarihi", "gcb tarihi", "gb tarihi", "beyanname tarihi", "tescil tarihi"]):
@@ -358,7 +359,7 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
                 intac_date_score = score
                 intac_date_found = True
 
-        # 4. Fatura No (Highest priority for e-arşiv, e-fatura)
+        # 4. Fatura No
         if any(k in hl for k in ["fatura", "invoice"]):
             score = 0
             if any(k in hl for k in ["e-arsiv", "e-arşiv", "e-fatura", "e-invoice"]):
@@ -388,7 +389,7 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
 
     # Fallback for GÇB Tarihi if not found by keywords, but column right after GÇB NO has "tarih" or "date"
     if not gcb_date_found and gcb_col_idx > 0 and gcb_col_idx < len(headers):
-        next_hl = normalize_turkish(headers[gcb_col_idx]) # index gcb_col_idx is col idx+1
+        next_hl = normalize_turkish(headers[gcb_col_idx])
         if any(k in next_hl for k in ["tarih", "date"]):
             gcb_date_col_idx = gcb_col_idx + 1
             gcb_date_found = True
@@ -398,27 +399,17 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
     if not fatura_col_idx: fatura_col_idx = 1
     if not firma_col_idx: firma_col_idx = 3
 
+    need_save = False
     # Handle İntaç Tarihi output column for scraper writing
     if intac_date_found:
         date_col_idx = intac_date_col_idx
     else:
-        # If no explicit İntaç Date column was found, automatically append it!
-        if file_path and os.path.exists(file_path):
-            try:
-                wb_write = openpyxl.load_workbook(file_path)
-                ws_write = wb_write.active
-                new_col_idx = len(headers) + 1
-                ws_write.cell(row=1, column=new_col_idx, value="Gümrük İntaç Tarihi")
-                apply_table_formatting_to_sheet(ws_write)
-                wb_write.save(file_path)
-                wb_write.close()
-                headers.append("Gümrük İntaç Tarihi")
-                date_col_idx = new_col_idx
-            except Exception as e:
-                print("Warning: Could not automatically append date column:", e)
-                date_col_idx = len(headers) + 1
-        else:
-            date_col_idx = 12
+        # If no explicit İntaç Date column was found, automatically append it to ws directly!
+        new_col_idx = len(headers) + 1
+        ws.cell(row=1, column=new_col_idx, value="Gümrük İntaç Tarihi")
+        headers.append("Gümrük İntaç Tarihi")
+        date_col_idx = new_col_idx
+        need_save = True
               
     rows = []
     for r in range(2, ws.max_row + 1):
@@ -467,6 +458,13 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
             "values": row_values
         })
         
+    if need_save:
+        try:
+            apply_table_formatting_to_sheet(ws)
+            wb.save(file_path)
+        except Exception as ex:
+            print("Error saving appended column in read_excel_data:", ex)
+            
     wb.close()
     return {
         "headers": headers, 
@@ -953,6 +951,10 @@ async def run_scraper_task(session_id: str, websocket: WebSocket, rows_to_query:
         completed = 0
         completed_lock = threading.Lock()
         excel_lock = threading.Lock()
+        
+        # Ensure date_col_idx is synced and Gümrük İntaç Tarihi column exists on disk
+        res_check = read_excel_data(excel_path)
+        session.date_col_idx = res_check["date_col_idx"]
         
         # Load the workbook once at the start of the task
         try:
