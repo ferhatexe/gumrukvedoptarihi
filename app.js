@@ -167,9 +167,7 @@ function getGcbConsolidatedStatus(rows) {
     rows.forEach(item => {
         let status;
         const qs = queryStatus[item.row];
-        if (item.intac && item.status === "İntaç Tarihi Var") {
-            status = "İntaç Tarihi Var";
-        } else if (qs) {
+        if (qs) {
             status = qs.status;
         } else {
             status = item.status || "Bekliyor";
@@ -358,6 +356,10 @@ function switchPanelTab(tabId) {
     const activeContent = document.getElementById(tabId);
     if (activeBtn) activeBtn.classList.add("active");
     if (activeContent) activeContent.classList.add("active");
+}
+
+function switchTab(tabId) {
+    switchPanelTab(tabId);
 }
 
 // Load Excel data from backend API
@@ -771,6 +773,8 @@ function addTerminalLine(text, className = "") {
 // Trigger all automated queries
 function startAutomation() {
     if (socket && socket.readyState === WebSocket.OPEN) {
+        switchPanelTab("tab-terminal"); // Switch to system logs tab automatically
+        addTerminalLine("[SİSTEM] Otomatik sorgulama işlemi başlatıldı.", "system");
         socket.send(JSON.stringify({ 
             action: "start_all"
         }));
@@ -779,7 +783,6 @@ function startAutomation() {
         btnStop.removeAttribute("disabled");
         progressBarFill.style.width = "0%";
         progressPercent.innerText = "0%";
-        switchTab("tab-terminal"); // Switch to system logs tab automatically
         startQueryTimer();
     }
 }
@@ -852,18 +855,12 @@ function renderTable(rows) {
     
     let html = "";
     rows.forEach(item => {
-        // Determine display state: prioritize actual intac data, then queryStatus, then item.status
+        // Determine display state: prioritize queryStatus, then item.status
         let state;
-        if (item.intac && item.status === "İntaç Tarihi Var") {
-            state = { intac: item.intac, status: "İntaç Tarihi Var" };
-        } else if (queryStatus[item.row]) {
+        if (queryStatus[item.row]) {
             state = queryStatus[item.row];
-            // If queryStatus says intac found, also use it
-            if (state.intac) {
-                state = { intac: state.intac, status: "İntaç Tarihi Var" };
-            }
         } else {
-            state = { intac: item.intac, status: item.status };
+            state = { intac: null, status: item.status || "Bekliyor" };
         }
         
         let badgeClass = "badge-pending";
@@ -960,7 +957,8 @@ function renderTable(rows) {
         }
         
         // 3. Status and Action buttons
-        rowHtml += `<td><span id="badge-${item.row}" class="badge ${badgeClass}">${state.status}</span></td>`;
+        const displayBadgeText = (state.status === "İntaç Tarihi Var") ? "İntaç Var" : state.status;
+        rowHtml += `<td><span id="badge-${item.row}" class="badge ${badgeClass}">${displayBadgeText}</span></td>`;
         rowHtml += `<td id="action-cell-${item.row}">${item.gcb ? actionBtn : "-"}</td>`;
         rowHtml += `</tr>`;
         
@@ -986,7 +984,7 @@ function updateRowUIStatus(row, statusText, badgeClass, date = null, gcb = null)
     const badge = document.getElementById(`badge-${row}`);
     if (badge) {
         badge.className = "badge " + badgeClass;
-        badge.innerText = statusText;
+        badge.innerText = (statusText === "İntaç Tarihi Var") ? "İntaç Var" : statusText;
     }
     
     if (date !== null) {
@@ -1196,9 +1194,7 @@ function updateStats() {
         rows.forEach(item => {
             let rowStatus;
             const qs = queryStatus[item.row];
-            if (item.intac && item.status === "İntaç Tarihi Var") {
-                rowStatus = "İntaç Tarihi Var";
-            } else if (qs) {
+            if (qs) {
                 rowStatus = qs.status;
             } else {
                 rowStatus = item.status || "Bekliyor";

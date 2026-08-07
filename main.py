@@ -471,9 +471,8 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
         if not fatura.strip() and not firma.strip() and not gcb.strip():
             continue
             
+        # Initial status for all rows is Bekliyor (pending user query)
         status = "Bekliyor"
-        if intac_str:
-            status = "İntaç Tarihi Var"
             
         rows.append({
             "row": r,
