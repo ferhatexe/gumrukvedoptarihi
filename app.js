@@ -334,17 +334,19 @@ document.addEventListener("DOMContentLoaded", () => {
     // Start the cooldown ticker
     setInterval(updateCooldowns, 1000);
     
-    // Hash-based routing for page tabs
-    function handleHashRoute() {
-        const hash = window.location.hash.replace('#', '');
-        if (hash === 'query' || hash === 'merge') {
-            switchHeaderTab(hash);
+    // Clean Path-based routing for page tabs (History API)
+    function handlePathRoute() {
+        const path = window.location.pathname.toLowerCase();
+        const hash = window.location.hash.replace('#', '').toLowerCase();
+        
+        if (path.includes('merge') || hash === 'merge') {
+            switchHeaderTab('merge');
         } else {
-            window.location.hash = 'query';
+            switchHeaderTab('query');
         }
     }
-    window.addEventListener("hashchange", handleHashRoute);
-    handleHashRoute();
+    window.addEventListener("popstate", handlePathRoute);
+    handlePathRoute();
 });
 
 // UI tab switching helper
@@ -882,20 +884,22 @@ function renderTable(rows) {
         const gcbStr = (item.gcb || "").trim().toUpperCase();
         const isETGB = gcbStr.length === 16;
         let typeBadge = "";
-        if (isETGB) {
-            typeBadge = '<span class="tag-etgb">ETGB</span>';
-        } else if (gcbStr.length >= 18) {
-            const typeCode = gcbStr.substring(8, 10);
-            if (typeCode === "EX") {
-                typeBadge = '<span class="tag-ihracat">EX</span>';
-            } else if (typeCode === "IM") {
-                typeBadge = '<span class="tag-ithalat">IM</span>';
-            } else if (typeCode === "AN") {
-                typeBadge = '<span class="tag-antrepo">AN</span>';
-            } else if (typeCode === "TR") {
-                typeBadge = '<span class="tag-transit">TR</span>';
-            } else if (typeCode === "EU") {
-                typeBadge = '<span class="tag-transit-eu">EU</span>';
+        if (gcbStr && gcbStr !== "-") {
+            if (isETGB) {
+                typeBadge = '<span class="tag-etgb">ETGB</span>';
+            } else if (gcbStr.length >= 18) {
+                const typeCode = gcbStr.substring(8, 10);
+                if (typeCode === "EX") {
+                    typeBadge = '<span class="tag-ihracat">EX</span>';
+                } else if (typeCode === "IM") {
+                    typeBadge = '<span class="tag-ithalat">IM</span>';
+                } else if (typeCode === "AN") {
+                    typeBadge = '<span class="tag-antrepo">AN</span>';
+                } else if (typeCode === "TR") {
+                    typeBadge = '<span class="tag-transit">TR</span>';
+                } else if (typeCode === "EU") {
+                    typeBadge = '<span class="tag-transit-eu">EU</span>';
+                }
             }
         }
         
@@ -931,7 +935,8 @@ function renderTable(rows) {
                 
                 if (isGcbCol) {
                     const cleanGcbVal = (val || "-").trim();
-                    rowHtml += `<td class="font-mono"><strong class="gcb-val-text" onclick="copyGcbText('${cleanGcbVal}', event)" title="Tıklayarak kopyala">${cleanGcbVal}</strong>${typeBadge}</td>`;
+                    const cellBadge = (cleanGcbVal && cleanGcbVal !== "-") ? typeBadge : "";
+                    rowHtml += `<td class="font-mono" style="white-space: nowrap;"><div class="gcb-cell-wrap"><strong class="gcb-val-text" onclick="copyGcbText('${cleanGcbVal}', event)" title="Tıklayarak kopyala">${cleanGcbVal}</strong>${cellBadge}</div></td>`;
                 } else if (isDateCol) {
                     rowHtml += `<td id="date-${item.row}" class="font-mono">${formatDate(state.intac || val) || "-"}</td>`;
                 } else if (isAnyDateCol) {
@@ -947,9 +952,10 @@ function renderTable(rows) {
         } else {
             // Fallback to static columns if row values array is missing
             const cleanGcbVal = (item.gcb || "-").trim();
+            const cellBadge = (cleanGcbVal && cleanGcbVal !== "-") ? typeBadge : "";
             rowHtml += `<td class="font-mono">${item.fatura || "-"}</td>`;
             rowHtml += `<td title="${item.firma}">${item.firma ? truncate(item.firma, 35) : "-"}</td>`;
-            rowHtml += `<td class="font-mono"><strong class="gcb-val-text" onclick="copyGcbText('${cleanGcbVal}', event)" title="Tıklayarak kopyala">${cleanGcbVal}</strong>${typeBadge}</td>`;
+            rowHtml += `<td class="font-mono" style="white-space: nowrap;"><div class="gcb-cell-wrap"><strong class="gcb-val-text" onclick="copyGcbText('${cleanGcbVal}', event)" title="Tıklayarak kopyala">${cleanGcbVal}</strong>${cellBadge}</div></td>`;
             rowHtml += `<td id="date-${item.row}" class="font-mono">${formatDate(state.intac) || "-"}</td>`;
         }
         
@@ -1553,8 +1559,15 @@ function switchHeaderTab(tab) {
     if (activeTab === tab) return;
     activeTab = tab;
     
-    if (window.location.hash.replace('#', '') !== tab) {
-        window.location.hash = tab;
+    // Clean URL Path Routing (History API) without # hash
+    const targetPath = tab === 'merge' ? '/merge' : '/';
+    if (window.location.pathname !== targetPath && !(window.location.pathname === '/query' && tab === 'query')) {
+        window.history.pushState({ tab: tab }, '', targetPath);
+    }
+    
+    // Clear hash if leftover hash exists in URL
+    if (window.location.hash) {
+        window.history.replaceState({ tab: tab }, '', targetPath);
     }
     
     // Tab buttons

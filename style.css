@@ -1827,6 +1827,14 @@ body {
     text-decoration: underline;
 }
 
+.gcb-cell-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
 .tag-etgb {
     display: inline-flex;
     align-items: center;

@@ -573,6 +573,8 @@ def generate_custom_excel(parsed_items: List[dict], custom_path: str):
 
 # Endpoints
 @app.get("/")
+@app.get("/query")
+@app.get("/merge")
 def get_index():
     return FileResponse("index.html")
 
