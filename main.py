@@ -462,6 +462,12 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
 
 excel_global_lock = threading.Lock()
 
+def is_sistem_intac_header(header_text: str) -> bool:
+    if not header_text:
+        return False
+    ht = header_text.lower().replace("ç", "c").replace("ğ", "g").replace("ı", "i").replace("ö", "o").replace("ş", "s").replace("ü", "u")
+    return "sistem" in ht and ("intac" in ht or "intaç" in ht or "tarih" in ht)
+
 def ensure_intac_column(file_path: str) -> int:
     if not file_path or not os.path.exists(file_path):
         return 12
@@ -469,26 +475,32 @@ def ensure_intac_column(file_path: str) -> int:
         try:
             wb = openpyxl.load_workbook(file_path)
             ws = wb.active
-            max_col = ws.max_column
-            headers = [str(ws.cell(row=1, column=c).value or "").strip() for c in range(1, max_col + 1)]
             
-            # Look specifically for our dedicated system output column "Sistem Gümrük İntaç Tarihi"
-            intac_col_idx = 0
-            for idx, h in enumerate(headers, 1):
-                hl = normalize_turkish(h)
-                if "sistem gumruk intac tarihi" in hl or "sistem intac tarihi" in hl:
-                    intac_col_idx = idx
-                    break
+            headers = []
+            matching_indices = []
+            
+            for c in range(1, ws.max_column + 1):
+                val = str(ws.cell(row=1, column=c).value or "").strip()
+                headers.append(val)
+                if is_sistem_intac_header(val):
+                    matching_indices.append(c)
                     
-            # If no dedicated system column exists, ALWAYS append a brand new column at the FAR RIGHT END of the table!
-            if not intac_col_idx:
-                intac_col_idx = len(headers) + 1
-                header_cell = ws.cell(row=1, column=intac_col_idx, value="Sistem Gümrük İntaç Tarihi")
+            if matching_indices:
+                # Keep the first matching column
+                target_col_idx = matching_indices[0]
+                # If there are duplicate matching columns, delete them from right to left
+                duplicates = sorted(matching_indices[1:], reverse=True)
+                for dup_idx in duplicates:
+                    try:
+                        ws.delete_cols(dup_idx)
+                    except Exception as dex:
+                        print(f"Warning deleting dup col {dup_idx}: {dex}")
             else:
-                header_cell = ws.cell(row=1, column=intac_col_idx)
-                if not header_cell.value:
-                    header_cell.value = "Sistem Gümrük İntaç Tarihi"
-                    
+                # Append brand new column at the far right
+                target_col_idx = len(headers) + 1
+                
+            header_cell = ws.cell(row=1, column=target_col_idx, value="Sistem Gümrük İntaç Tarihi")
+            
             # Highlight column header with bright soft green fill & dark green bold text so it stands out at the far right
             try:
                 header_cell.fill = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")
@@ -497,12 +509,12 @@ def ensure_intac_column(file_path: str) -> int:
             except Exception:
                 pass
                 
-            col_letter = get_column_letter(intac_col_idx)
+            col_letter = get_column_letter(target_col_idx)
             ws.column_dimensions[col_letter].width = 24
             
             wb.save(file_path)
             wb.close()
-            return intac_col_idx
+            return target_col_idx
         except Exception as e:
             print(f"[EXCEL SÜTUN OLUŞTURMA HATASI]: {e}")
             return 12
