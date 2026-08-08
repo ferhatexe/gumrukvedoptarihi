@@ -458,10 +458,19 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
             gcb_date_col_idx = gcb_col_idx + 1
             gcb_date_found = True
 
-    # Ensure Gümrük İntaç Tarihi column exists on disk and gets highlighted
+    # CRITICAL: Close the first workbook BEFORE calling ensure_intac_column
+    # Otherwise the file is locked and ensure_intac_column cannot save the new column!
+    wb.close()
+    
+    # Ensure Sistem Gümrük İntaç Tarihi column exists on disk
     date_col_idx = ensure_intac_column(file_path)
     
-    # Reload workbook after column assurance
+    # Fallback default column indices if detection failed
+    if not gcb_col_idx: gcb_col_idx = 9
+    if not fatura_col_idx: fatura_col_idx = 1
+    if not firma_col_idx: firma_col_idx = 3
+    
+    # Reload workbook after column was created on disk
     wb = openpyxl.load_workbook(file_path)
     ws = wb.active
     
