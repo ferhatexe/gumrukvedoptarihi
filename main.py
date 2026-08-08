@@ -1017,19 +1017,12 @@ async def run_scraper_task(session_id: str, websocket: WebSocket, rows_to_query:
         """All blocking work runs in this function via run_in_executor."""
         completed = 0
         completed_lock = threading.Lock()
-        excel_lock = threading.Lock()
         
-        # Ensure date_col_idx is synced and Gümrük İntaç Tarihi column exists on disk
+        # Ensure date_col_idx is synced and Sistem Gümrük İntaç Tarihi column exists on disk
         res_check = read_excel_data(excel_path)
         session.date_col_idx = res_check["date_col_idx"]
         
-        # Load the workbook once at the start of the task
-        try:
-            wb = openpyxl.load_workbook(excel_path)
-            ws = wb.active
-        except Exception as e:
-            ws_log(f"[HATA] Excel dosyası okunamadı: {str(e)}")
-            return
+        ws_log(f"[SİSTEM] 📌 İntaç tarihleri Excel dosyasının {session.date_col_idx}. sütununa ('Sistem Gümrük İntaç Tarihi') yazılacak.")
         
         # ── Step 1: Deduplicate GCB numbers ──
         gcb_groups: Dict[str, List[dict]] = {}
@@ -1088,8 +1081,10 @@ async def run_scraper_task(session_id: str, websocket: WebSocket, rows_to_query:
                             val_to_write = date_str
                             
                         save_intac_date_to_excel(excel_path, row_idx, session.date_col_idx, val_to_write)
+                        ws_log(f"[EXCEL] ✅ Satır {row_idx} → '{val_to_write}' yazıldı (Sütun {session.date_col_idx})")
                         ws_send({"type": "row_success", "row": row_idx, "gcb": gcb_no, "date": result["date"]})
                     except Exception as e:
+                        ws_log(f"[EXCEL HATA] Satır {row_idx} yazılamadı: {str(e)}")
                         ws_send({"type": "row_fail", "row": row_idx, "gcb": gcb_no, "message": f"Excel yazma hatası: {str(e)}"})
                 elif (result.get("success") and result.get("status") == "Kapanmamış") or result.get("status") == "RateLimit":
                     ws_send({"type": "row_not_closed", "row": row_idx, "gcb": gcb_no, "message": result.get("message", "Beyanname kapanmamış.")})
@@ -1270,17 +1265,6 @@ async def run_scraper_task(session_id: str, websocket: WebSocket, rows_to_query:
                 ws_log("[SİSTEM] Sorgulama durduruldu.")
             else:
                 executor.shutdown(wait=True)
-            
-            try:
-                with excel_lock:
-                    apply_table_formatting_to_sheet(ws)
-                    wb.save(excel_path)
-            except Exception as e:
-                print("Error in final save/format:", e)
-            try:
-                wb.close()
-            except Exception:
-                pass
     
     try:
         # Run ALL blocking work in a separate thread so asyncio event loop stays free
