@@ -537,6 +537,13 @@ def save_intac_date_to_excel(excel_path: str, row_idx: int, col_idx: int, val_to
                 
             cell.alignment = Alignment(horizontal="center", vertical="center")
             
+            # Highlight written date cell with soft mint green fill
+            try:
+                cell.fill = PatternFill(start_color="F0FDF4", end_color="F0FDF4", fill_type="solid")
+                cell.font = Font(name="Calibri", size=11, bold=True, color="065F46")
+            except Exception:
+                pass
+            
             # Set column width
             col_letter = get_column_letter(col_idx)
             ws.column_dimensions[col_letter].width = 22
@@ -1527,6 +1534,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str = None):
                     continue
                 
                 await websocket.send_json({"type": "log", "message": f"Sorgulanacak {len(pending)} beyanname bulundu. İşlem başlatılıyor..."})
+                await websocket.send_json({"type": "log", "message": f"[SİSTEM] 📌 Bulunan intaç tarihleri Excel dosyasında {session.date_col_idx}. Sütuna ('Gümrük İntaç Tarihi') yazılmaktadır."})
                 session.task = asyncio.create_task(run_scraper_task(session_id, websocket, pending))
                 
             elif action == "start_custom_list":
