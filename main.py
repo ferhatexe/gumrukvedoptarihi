@@ -19,7 +19,7 @@ except ImportError:
 import openpyxl
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.utils import get_column_letter
-from openpyxl.styles import Alignment
+from openpyxl.styles import Alignment, PatternFill, Font, Border, Side
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, File, UploadFile, Form
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 
@@ -174,45 +174,100 @@ def normalize_turkish(text: str) -> str:
     }
     return "".join(mapping.get(c, c.lower()) for c in text)
 
-def apply_table_formatting_to_sheet(ws):
-    try:
-        ws.sheet_view.showGridLines = True
-    except Exception:
-        try:
-            ws.views.sheetView[0].showGridLines = True
-        except Exception:
-            pass
+def is_sistem_intac_header(header_text: str) -> bool:
+    """Check if a header text matches 'Sistem Gümrük İntaç Tarihi' regardless of encoding."""
+    if not header_text:
+        return False
+    ht = header_text.lower().replace("ç", "c").replace("ğ", "g").replace("ı", "i").replace("ö", "o").replace("ş", "s").replace("ü", "u")
+    return "sistem" in ht and ("intac" in ht or "tarih" in ht)
 
+def apply_table_formatting_to_sheet(ws):
+    """Apply modern, professional table formatting to worksheet."""
     max_row = ws.max_row
     max_col = ws.max_column
     
     if max_row < 1 or max_col < 1:
         return
 
-    # Enable native auto filter on header row without creating corrupting openpyxl Table objects
+    # ── Colors ──
+    HEADER_BG = "1F2937"       # Dark charcoal
+    HEADER_FG = "FFFFFF"       # White text
+    ROW_EVEN_BG = "F9FAFB"    # Very light gray
+    ROW_ODD_BG = "FFFFFF"     # White
+    INTAC_HEADER_BG = "059669" # Emerald green
+    INTAC_CELL_BG = "ECFDF5"  # Mint green tint
+
+    # ── Border style ──
+    thin_side = Side(style="thin", color="D1D5DB")       # Light gray borders
+    header_bottom = Side(style="medium", color="374151")  # Darker bottom for header
+    thin_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+    header_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=header_bottom)
+
+    # ── Fonts ──
+    header_font = Font(name="Calibri", size=11, bold=True, color=HEADER_FG)
+    data_font = Font(name="Calibri", size=10)
+    intac_header_font = Font(name="Calibri", size=11, bold=True, color=HEADER_FG)
+    intac_data_font = Font(name="Calibri", size=10, bold=True, color="065F46")
+
+    # ── Fills ──
+    header_fill = PatternFill(start_color=HEADER_BG, end_color=HEADER_BG, fill_type="solid")
+    even_fill = PatternFill(start_color=ROW_EVEN_BG, end_color=ROW_EVEN_BG, fill_type="solid")
+    odd_fill = PatternFill(start_color=ROW_ODD_BG, end_color=ROW_ODD_BG, fill_type="solid")
+    intac_header_fill = PatternFill(start_color=INTAC_HEADER_BG, end_color=INTAC_HEADER_BG, fill_type="solid")
+    intac_cell_fill = PatternFill(start_color=INTAC_CELL_BG, end_color=INTAC_CELL_BG, fill_type="solid")
+
+    # ── Alignments ──
+    center_align = Alignment(horizontal="center", vertical="center", wrap_text=False)
+    left_align = Alignment(horizontal="left", vertical="center", wrap_text=False)
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    # ── Enable auto filter ──
     ref = f"A1:{get_column_letter(max_col)}{max_row}"
     ws.auto_filter.ref = ref
-    
-    # Alignments
-    center_align = Alignment(horizontal="center", vertical="center")
-    left_align = Alignment(horizontal="left", vertical="center")
-    
-    # Loop columns to auto-fit and style cells
+
+    # ── Freeze top row ──
+    ws.freeze_panes = "A2"
+
+    # ── Row height for header ──
+    ws.row_dimensions[1].height = 30
+
+    # ── Detect Sistem İntaç column index ──
+    intac_col = 0
+    for ci in range(1, max_col + 1):
+        hv = str(ws.cell(row=1, column=ci).value or "").strip()
+        if is_sistem_intac_header(hv):
+            intac_col = ci
+            break
+
+    # ── Format columns ──
     for col_idx in range(1, max_col + 1):
         header_val = str(ws.cell(row=1, column=col_idx).value or "").strip()
         hl = normalize_turkish(header_val)
         
-        is_center_col = any(k in hl for k in [
-            "tarih", "date", "no", "numara", "gcb", "gb", "fatura", "tescil", "kod", "code"
+        is_intac = (col_idx == intac_col)
+        is_center_col = is_intac or any(k in hl for k in [
+            "tarih", "date", "no", "numara", "gcb", "gb", "fatura", "tescil", "kod", "code", "birim", "para"
         ])
         
+        # ── Header cell ──
+        hcell = ws.cell(row=1, column=col_idx)
+        if is_intac:
+            hcell.fill = intac_header_fill
+            hcell.font = intac_header_font
+        else:
+            hcell.fill = header_fill
+            hcell.font = header_font
+        hcell.alignment = header_align
+        hcell.border = header_border
+
+        # ── Data cells ──
         max_len = len(header_val)
         for row_idx in range(2, max_row + 1):
             cell = ws.cell(row=row_idx, column=col_idx)
             val_str = str(cell.value or "").strip()
             
-            # Standardize date format to DD.MM.YYYY string or date object
-            if any(k in hl for k in ["tarih", "date", "intaç", "intac"]):
+            # Date formatting
+            if any(k in hl for k in ["tarih", "date", "intaç", "intac"]) or is_intac:
                 if isinstance(cell.value, (datetime, date)):
                     cell.number_format = 'dd.mm.yyyy'
                     val_str = cell.value.strftime("%d.%m.%Y")
@@ -231,12 +286,21 @@ def apply_table_formatting_to_sheet(ws):
                         cell.number_format = 'dd.mm.yyyy'
                     except Exception:
                         pass
-                        
-            # Apply Alignment
-            if is_center_col:
-                cell.alignment = center_align
+
+            # Alignment
+            cell.alignment = center_align if is_center_col else left_align
+            
+            # Border
+            cell.border = thin_border
+            
+            # Fill: İntaç column gets green tint, others get alternating rows
+            if is_intac and cell.value:
+                cell.fill = intac_cell_fill
+                cell.font = intac_data_font
             else:
-                cell.alignment = left_align
+                is_even = (row_idx % 2 == 0)
+                cell.fill = even_fill if is_even else odd_fill
+                cell.font = data_font
                 
             if cell.value is not None:
                 max_len = max(max_len, len(val_str))
@@ -461,12 +525,6 @@ def read_excel_data(file_path: str) -> Dict[str, Any]:
     }
 
 excel_global_lock = threading.Lock()
-
-def is_sistem_intac_header(header_text: str) -> bool:
-    if not header_text:
-        return False
-    ht = header_text.lower().replace("ç", "c").replace("ğ", "g").replace("ı", "i").replace("ö", "o").replace("ş", "s").replace("ü", "u")
-    return "sistem" in ht and ("intac" in ht or "intaç" in ht or "tarih" in ht)
 
 def ensure_intac_column(file_path: str) -> int:
     if not file_path or not os.path.exists(file_path):
@@ -729,6 +787,17 @@ async def upload_file(session_id: str = None, file: UploadFile = File(...)):
 def download_file(session_id: str = None):
     session = get_session(session_id)
     if session.active_excel_path and os.path.exists(session.active_excel_path):
+        # Apply professional formatting before serving
+        try:
+            with excel_global_lock:
+                wb = openpyxl.load_workbook(session.active_excel_path)
+                ws = wb.active
+                apply_table_formatting_to_sheet(ws)
+                wb.save(session.active_excel_path)
+                wb.close()
+        except Exception as e:
+            print(f"Warning: Could not format Excel before download: {e}")
+        
         raw_name = session.original_filename or get_display_filename(session) or "EXPORT.XLSX"
         base, _ = os.path.splitext(raw_name)
         download_filename = f"{base}_GUNCEL.xlsx"
