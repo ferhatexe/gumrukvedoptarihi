@@ -472,27 +472,24 @@ def ensure_intac_column(file_path: str) -> int:
             max_col = ws.max_column
             headers = [str(ws.cell(row=1, column=c).value or "").strip() for c in range(1, max_col + 1)]
             
-            # Check if an explicit İntaç Tarihi column already exists
+            # Look specifically for our dedicated system output column "Sistem Gümrük İntaç Tarihi"
             intac_col_idx = 0
             for idx, h in enumerate(headers, 1):
                 hl = normalize_turkish(h)
-                if any(k in hl for k in ["gümrük intaç tarihi", "intaç tarihi", "intac tarihi", "kapanis tarihi", "kapanış tarihi"]):
-                    intac_col_idx = idx
-                    break
-                elif any(k in hl for k in ["intaç", "intac", "kapanma", "kapanış", "kapanis"]):
+                if "sistem gumruk intac tarihi" in hl or "sistem intac tarihi" in hl:
                     intac_col_idx = idx
                     break
                     
+            # If no dedicated system column exists, ALWAYS append a brand new column at the FAR RIGHT END of the table!
             if not intac_col_idx:
-                # Append brand new column "Gümrük İntaç Tarihi" at the end of the table
                 intac_col_idx = len(headers) + 1
-                header_cell = ws.cell(row=1, column=intac_col_idx, value="Gümrük İntaç Tarihi")
+                header_cell = ws.cell(row=1, column=intac_col_idx, value="Sistem Gümrük İntaç Tarihi")
             else:
                 header_cell = ws.cell(row=1, column=intac_col_idx)
                 if not header_cell.value:
-                    header_cell.value = "Gümrük İntaç Tarihi"
+                    header_cell.value = "Sistem Gümrük İntaç Tarihi"
                     
-            # Highlight column header with bright soft green fill & dark green bold text so it stands out
+            # Highlight column header with bright soft green fill & dark green bold text so it stands out at the far right
             try:
                 header_cell.fill = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")
                 header_cell.font = Font(name="Calibri", size=11, bold=True, color="065F46")
@@ -501,7 +498,7 @@ def ensure_intac_column(file_path: str) -> int:
                 pass
                 
             col_letter = get_column_letter(intac_col_idx)
-            ws.column_dimensions[col_letter].width = 22
+            ws.column_dimensions[col_letter].width = 24
             
             wb.save(file_path)
             wb.close()
@@ -518,10 +515,10 @@ def save_intac_date_to_excel(excel_path: str, row_idx: int, col_idx: int, val_to
             wb = openpyxl.load_workbook(excel_path)
             ws = wb.active
             
-            # Ensure the target column has header "Gümrük İntaç Tarihi" on row 1
+            # Ensure the target column has header "Sistem Gümrük İntaç Tarihi" on row 1
             header_cell = ws.cell(row=1, column=col_idx)
             if not header_cell.value or str(header_cell.value).strip() == "":
-                header_cell.value = "Gümrük İntaç Tarihi"
+                header_cell.value = "Sistem Gümrük İntaç Tarihi"
             try:
                 header_cell.fill = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")
                 header_cell.font = Font(name="Calibri", size=11, bold=True, color="065F46")
@@ -546,7 +543,7 @@ def save_intac_date_to_excel(excel_path: str, row_idx: int, col_idx: int, val_to
             
             # Set column width
             col_letter = get_column_letter(col_idx)
-            ws.column_dimensions[col_letter].width = 22
+            ws.column_dimensions[col_letter].width = 24
             
             wb.save(excel_path)
             wb.close()
@@ -1534,7 +1531,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str = None):
                     continue
                 
                 await websocket.send_json({"type": "log", "message": f"Sorgulanacak {len(pending)} beyanname bulundu. İşlem başlatılıyor..."})
-                await websocket.send_json({"type": "log", "message": f"[SİSTEM] 📌 Bulunan intaç tarihleri Excel dosyasında {session.date_col_idx}. Sütuna ('Gümrük İntaç Tarihi') yazılmaktadır."})
+                await websocket.send_json({"type": "log", "message": f"[SİSTEM] 📌 Bulunan intaç tarihleri Excel dosyasının EN SAĞINDAKİ {session.date_col_idx}. Sütuna ('Sistem Gümrük İntaç Tarihi') yazılmaktadır."})
                 session.task = asyncio.create_task(run_scraper_task(session_id, websocket, pending))
                 
             elif action == "start_custom_list":
